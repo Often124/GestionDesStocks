@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from './supabaseClient'
 
 interface Item {
     id: string;
@@ -8,47 +9,97 @@ interface Item {
 }
 
 function App() {
-    const [items, setItems] = useState<Item[]>(() => {
-        const saved = localStorage.getItem('lovely-shopping-stock');
-        return saved ? JSON.parse(saved) : [];
-    });
-
+    const [items, setItems] = useState<Item[]>([]);
     const [search, setSearch] = useState('');
     const [newItem, setNewItem] = useState({ title: '', ean: '', quantity: '' });
+    const [loading, setLoading] = useState(true);
 
+    // Charger les articles au démarrage
     useEffect(() => {
-        localStorage.setItem('lovely-shopping-stock', JSON.stringify(items));
-    }, [items]);
+        fetchItems();
 
-    const handleAddItem = (e: React.FormEvent) => {
+        // Configuration du Realtime
+        const channel = supabase
+            .channel('items-db-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'items' },
+                (payload) => {
+                    if (payload.eventType === 'INSERT') {
+                        setItems((prev) => [payload.new as Item, ...prev]);
+                    } else if (payload.eventType === 'DELETE') {
+                        setItems((prev) => prev.filter((item) => item.id !== payload.old.id));
+                    } else if (payload.eventType === 'UPDATE') {
+                        setItems((prev) =>
+                            prev.map((item) => (item.id === payload.new.id ? (payload.new as Item) : item))
+                        );
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const fetchItems = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('items')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Erreur lors du chargement des articles:', error);
+        } else {
+            setItems(data || []);
+        }
+        setLoading(false);
+    };
+
+    const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newItem.title || !newItem.ean || !newItem.quantity) return;
 
-        const item: Item = {
-            id: crypto.randomUUID(),
-            title: newItem.title,
-            ean: newItem.ean,
-            quantity: parseInt(newItem.quantity),
-        };
+        const { error } = await supabase
+            .from('items')
+            .insert([
+                {
+                    title: newItem.title,
+                    ean: newItem.ean,
+                    quantity: parseInt(newItem.quantity),
+                },
+            ]);
 
-        setItems([item, ...items]);
-        setNewItem({ title: '', ean: '', quantity: '' });
+        if (error) {
+            alert("Erreur lors de l'ajout de l'article : " + error.message);
+        } else {
+            setNewItem({ title: '', ean: '', quantity: '' });
+        }
     };
 
-    const deleteItem = (id: string) => {
-        setItems(items.filter(item => item.id !== id));
+    const deleteItem = async (id: string) => {
+        const { error } = await supabase
+            .from('items')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            alert("Erreur lors de la suppression : " + error.message);
+        }
     };
 
     const filteredItems = items.filter(item =>
-        item.title.toLowerCase().includes(search.toLowerCase()) ||
-        item.ean.includes(search)
+        item.title?.toLowerCase().includes(search.toLowerCase()) ||
+        item.ean?.includes(search)
     );
 
     return (
         <div className="container">
             <header>
                 <h1>Lovely Shopping</h1>
-                <p className="subtitle">Système de Gestion des Stocks</p>
+                <p className="subtitle">Système de Gestion des Stocks (Supabase Cloud)</p>
             </header>
 
             <div className="grid">
@@ -63,6 +114,7 @@ function App() {
                                     value={newItem.title}
                                     onChange={e => setNewItem({ ...newItem, title: e.target.value })}
                                     placeholder="Ex: T-shirt en soie"
+                                    disabled={loading}
                                 />
                             </div>
                             <div className="form-group">
@@ -72,6 +124,7 @@ function App() {
                                     value={newItem.ean}
                                     onChange={e => setNewItem({ ...newItem, ean: e.target.value })}
                                     placeholder="Ex: 3600523..."
+                                    disabled={loading}
                                 />
                             </div>
                             <div className="form-group">
@@ -81,9 +134,12 @@ function App() {
                                     value={newItem.quantity}
                                     onChange={e => setNewItem({ ...newItem, quantity: e.target.value })}
                                     placeholder="0"
+                                    disabled={loading}
                                 />
                             </div>
-                            <button type="submit">Enregistrer l'article</button>
+                            <button type="submit" disabled={loading}>
+                                {loading ? 'Connexion en cours...' : 'Enregistrer l\'article'}
+                            </button>
                         </form>
                     </div>
                 </aside>
@@ -101,7 +157,10 @@ function App() {
                     </div>
 
                     <div className="glass-card">
-                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>Inventaire ({filteredItems.length})</h2>
+                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>
+                            Inventaire ({filteredItems.length})
+                            {loading && <span style={{ fontSize: '0.8rem', marginLeft: '1rem', color: 'var(--text-dim)' }}>Chargement...</span>}
+                        </h2>
                         <div className="item-list">
                             {filteredItems.length > 0 ? (
                                 filteredItems.map(item => (
@@ -123,7 +182,8 @@ function App() {
                                 ))
                             ) : (
                                 <div className="empty-state">
-                                    {search ? "Aucun article ne correspond à votre recherche." : "Votre inventaire est vide."}
+                                    {!loading && (search ? "Aucun article ne correspond à votre recherche." : "Votre inventaire est vide.")}
+                                    {loading && "Connexion à Supabase..."}
                                 </div>
                             )}
                         </div>
