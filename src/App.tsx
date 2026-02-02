@@ -540,41 +540,45 @@ function App() {
 
             {activeTab === 'inventory' && (
                 <>
-                    <section className="stats-dashboard">
-                        <div className="glass-card stat-card">
-                            <TrendingUp size={20} color="#fb6f92" />
-                            <div className="stat-value">{items.reduce((a, i) => a + (i.sold_quantity * i.sale_price), 0).toFixed(2)} €</div>
-                            <div className="stat-label">Ventes (24h)</div>
-                        </div>
-                        <div className="glass-card stat-card">
-                            <AlertTriangle size={20} color="#d90429" />
-                            <div className="stat-value" style={{ color: '#d90429' }}>{items.filter(i => i.quantity <= 1).length}</div>
-                            <div className="stat-label">Alertes Stock</div>
-                        </div>
-                    </section>
-
-                    <div className="grid">
-                        <aside>
-                            <div className="glass-card">
-                                <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Ajouter Article</h2>
-                                <form onSubmit={handleAddItem}>
-                                    <div className="form-group"><label>Intitulé</label><input type="text" value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} required /></div>
-                                    <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
-                                    <div className="form-group"><label>Catégorie</label>
-                                        <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
-                                            {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
-                                    <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
-                                    <div className="multiplier-grid">
-                                        {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
-                                    </div>
-                                    <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
-                                    <button type="submit">Enregistrer dans le Stock</button>
-                                </form>
+                    {!activeOrderId && (
+                        <section className="stats-dashboard">
+                            <div className="glass-card stat-card">
+                                <TrendingUp size={20} color="#fb6f92" />
+                                <div className="stat-value">{items.reduce((a, i) => a + (i.sold_quantity * i.sale_price), 0).toFixed(2)} €</div>
+                                <div className="stat-label">Ventes (24h)</div>
                             </div>
-                        </aside>
+                            <div className="glass-card stat-card">
+                                <AlertTriangle size={20} color="#d90429" />
+                                <div className="stat-value" style={{ color: '#d90429' }}>{items.filter(i => i.quantity <= 1).length}</div>
+                                <div className="stat-label">Alertes Stock</div>
+                            </div>
+                        </section>
+                    )}
+
+                    <div className={`grid ${activeOrderId ? 'focus-mode' : ''}`}>
+                        {!activeOrderId && (
+                            <aside>
+                                <div className="glass-card">
+                                    <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Ajouter Article</h2>
+                                    <form onSubmit={handleAddItem}>
+                                        <div className="form-group"><label>Intitulé</label><input type="text" value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} required /></div>
+                                        <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
+                                        <div className="form-group"><label>Catégorie</label>
+                                            <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
+                                                {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
+                                        <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
+                                        <div className="multiplier-grid">
+                                            {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
+                                        </div>
+                                        <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
+                                        <button type="submit">Enregistrer dans le Stock</button>
+                                    </form>
+                                </div>
+                            </aside>
+                        )}
                         <main>
                             <div className="search-container" style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ position: 'relative', flex: 1 }}>

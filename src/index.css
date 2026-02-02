@@ -852,3 +852,11 @@ button:hover {
     padding-left: 1rem;
     margin-bottom: 1rem;
 }
+
+.grid.focus-mode {
+    grid-template-columns: 1fr;
+}
+
+.grid.focus-mode main {
+    max-width: 100%;
+}
