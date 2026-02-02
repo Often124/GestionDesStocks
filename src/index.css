@@ -374,6 +374,84 @@ button:hover {
     cursor: pointer;
 }
 
+/* Navigation Tabs */
+.view-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    justify-content: center;
+}
+
+.tab-btn {
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--text-dim);
+    border: 1px solid var(--card-border);
+    padding: 0.8rem 1.5rem;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(251, 111, 146, 0.3);
+}
+
+/* CRM & Orders */
+.customer-grid,
+.orders-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.customer-card {
+    padding: 1.5rem;
+}
+
+.basket-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--card-border);
+    font-size: 0.9rem;
+}
+
+.status-badge {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.status-attente {
+    background: var(--warning);
+    color: white;
+}
+
+.status-payé {
+    background: var(--success);
+    color: white;
+}
+
+.total-tag {
+    background: var(--primary);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 800;
+    margin-top: 1rem;
+    display: inline-block;
+}
+
 .empty-state {
     text-align: center;
     padding: 3rem;
