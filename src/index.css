@@ -7,7 +7,11 @@
     --card-border: rgba(251, 111, 146, 0.2);
     --text: #5e1c3a;
     --text-dim: #9d4d72;
-    --success: #ff85a2;
+    --success: #38b000;
+    --warning: #ffb703;
+    --danger: #d90429;
+    --secondary: #6c757d;
+    --accent: #f08080;
 }
 
 * {
@@ -278,6 +282,96 @@ button:hover {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Dashboard & Stats */
+.stats-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 0.2rem;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Alarms & Highlighting */
+.stock-alert {
+    border: 2px solid var(--danger) !important;
+    animation: pulse-danger 2s infinite;
+}
+
+@keyframes pulse-danger {
+    0% {
+        box-shadow: 0 0 0 0 rgba(217, 4, 41, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(217, 4, 41, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(217, 4, 41, 0);
+    }
+}
+
+/* Category Badges */
+.category-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: var(--ffe5ec);
+    color: var(--text-dim);
+    margin-top: 0.5rem;
+}
+
+/* Scanner UI */
+.scanner-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#reader {
+    width: 100%;
+    max-width: 500px;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.scanner-btn {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    cursor: pointer;
 }
 
 .empty-state {
