@@ -784,3 +784,18 @@ button:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 10px rgba(251, 111, 146, 0.2);
 }
+.version-badge {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(251, 111, 146, 0.15);
+    backdrop-filter: blur(5px);
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--primary);
+    border: 1px solid var(--card-border);
+    pointer-events: none;
+    z-index: 2000;
+}
