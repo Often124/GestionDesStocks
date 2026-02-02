@@ -554,40 +554,82 @@ button:hover {
 }
 
 .add-basket-refined {
-    background: var(--glass-bg);
-    border: 1px solid var(--primary);
-    color: var(--primary);
-    padding: 0.6rem;
-    border-radius: 10px;
+    background: linear-gradient(135deg, #fb6f92, #ff85a2);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 0.8rem 1.2rem;
+    border-radius: 15px;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center;
+    gap: 0.6rem;
     position: relative;
+    font-weight: 700;
+    box-shadow: 0 4px 15px rgba(251, 111, 146, 0.3);
+    overflow: hidden;
+}
+
+.add-basket-refined::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
 }
 
 .add-basket-refined:hover {
-    background: var(--primary);
-    color: white;
-    transform: translateY(-2px);
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(251, 111, 146, 0.5), 0 0 15px rgba(255, 215, 0, 0.3);
+    border-color: rgba(255, 215, 0, 0.5);
+    /* Gold touch */
+}
+
+.add-basket-refined:hover::after {
+    opacity: 1;
+}
+
+.add-basket-refined:active {
+    transform: scale(0.95);
 }
 
 .add-basket-refined.highlight {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 4px 10px rgba(251, 111, 146, 0.3);
+    background: linear-gradient(135deg, #ff477e, #fb6f92);
+    animation: button-glow 2s infinite;
+}
+
+@keyframes button-glow {
+    0% {
+        box-shadow: 0 0 5px rgba(251, 111, 146, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 0 20px rgba(251, 111, 146, 0.7), 0 0 10px rgba(255, 215, 0, 0.4);
+    }
+
+    100% {
+        box-shadow: 0 0 5px rgba(251, 111, 146, 0.4);
+    }
 }
 
 .add-badge {
-    background: #38b000;
-    color: white;
-    font-size: 0.6rem;
-    padding: 2px 4px;
-    border-radius: 4px;
+    background: #FFD700;
+    /* Or/Gold */
+    color: var(--text);
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
     position: absolute;
-    top: -5px;
-    right: -5px;
+    top: -8px;
+    right: -8px;
+    font-weight: 800;
+    border: 2px solid white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .remove-item-btn {
@@ -651,6 +693,25 @@ button:hover {
 
     .search-container {
         flex-direction: column;
+    }
+}
+
+@media (max-width: 600px) {
+    .customer-card>div:first-child {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .customer-card h3 {
+        font-size: 1.2rem;
+    }
+
+    .customer-card p {
+        background: rgba(251, 111, 146, 0.1);
+        padding: 0.2rem 0.6rem;
+        border-radius: 8px;
+        display: inline-block;
     }
 }
 

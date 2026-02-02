@@ -270,17 +270,40 @@ function App() {
     };
 
     const addItemToOrder = async (orderId: string, item: Item) => {
-        const { error } = await supabase.from('order_items').insert([{
-            order_id: orderId,
-            item_id: item.id,
-            quantity: 1,
-            unit_price: item.sale_price
-        }]);
+        // Sécurité Stock V3.8
+        const currentOrder = orders.find(o => o.id === orderId);
+        const inBasketQty = currentOrder?.order_items?.find(oi => oi.item_id === item.id)?.quantity || 0;
 
-        if (error) alert(error.message);
-        else {
-            showToast(`${item.title} ajouté ! ✅`);
-            fetchData();
+        if (item.quantity - inBasketQty <= 0) {
+            showToast("⚠️ Plus assez de stock !");
+            return;
+        }
+
+        const existingOrderItem = currentOrder?.order_items?.find(oi => oi.item_id === item.id);
+
+        if (existingOrderItem) {
+            const { error } = await supabase.from('order_items').update({
+                quantity: existingOrderItem.quantity + 1
+            }).eq('id', existingOrderItem.id);
+
+            if (error) alert(error.message);
+            else {
+                showToast(`${item.title} (+1) ajouté ! ✅`);
+                fetchData();
+            }
+        } else {
+            const { error } = await supabase.from('order_items').insert([{
+                order_id: orderId,
+                item_id: item.id,
+                quantity: 1,
+                unit_price: item.sale_price
+            }]);
+
+            if (error) alert(error.message);
+            else {
+                showToast(`${item.title} ajouté ! ✅`);
+                fetchData();
+            }
         }
     };
 
