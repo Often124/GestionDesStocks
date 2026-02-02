@@ -14,7 +14,8 @@ import {
     Clock,
     ArrowRight,
     X,
-    MinusCircle
+    MinusCircle,
+    Archive
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -69,7 +70,7 @@ const CATEGORIES_WITH_EMOJIS = [
 ];
 
 function App() {
-    const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders'>('inventory');
+    const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders' | 'archives'>('inventory');
     const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
     const [items, setItems] = useState<Item[]>([]);
@@ -107,6 +108,9 @@ function App() {
                 ...prev,
                 sale_price: (purchase * 1.20).toFixed(2)
             }));
+        } else if (newItem.purchase_price === '') {
+            // Correction V3.4: Si vide, on vide le prix de vente
+            setNewItem(prev => ({ ...prev, sale_price: '' }));
         }
     }, [newItem.purchase_price]);
 
@@ -178,6 +182,7 @@ function App() {
         if (!error) {
             setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '' });
             showToast("Article ajouté !");
+            fetchData(); // Fallback temps réel
         }
     };
 
@@ -186,11 +191,15 @@ function App() {
         if (!item) return;
         const updates: any = {};
         updates[field] = Math.max(0, (item[field] || 0) + delta);
-        await supabase.from('items').update(updates).eq('id', id);
+        const { error } = await supabase.from('items').update(updates).eq('id', id);
+        if (!error) fetchData(); // Fallback temps réel
     };
 
     const deleteItem = async (id: string) => {
-        if (confirm("Supprimer cet article ?")) await supabase.from('items').delete().eq('id', id);
+        if (confirm("Supprimer cet article ?")) {
+            const { error } = await supabase.from('items').delete().eq('id', id);
+            if (!error) fetchData(); // Fallback temps réel
+        }
     };
 
     const handleAddCustomer = async (e: React.FormEvent) => {
@@ -199,6 +208,7 @@ function App() {
         if (!error) {
             setNewCustomer({ first_name: '', last_name: '', facebook_pseudo: '' });
             showToast("Client enregistré !");
+            fetchData(); // Fallback temps réel
         }
     };
 
@@ -218,6 +228,7 @@ function App() {
             setActiveOrderId(order.id);
             setActiveTab('inventory');
             showToast("Panier ouvert ! 🛍️");
+            fetchData(); // Fallback temps réel
         }
     };
 
@@ -232,7 +243,7 @@ function App() {
         if (error) alert(error.message);
         else {
             showToast(`${item.title} ajouté ! ✅`);
-            fetchData(); // Pour le total
+            fetchData(); // Pour le total et Fallback temps réel
         }
     };
 
@@ -242,7 +253,7 @@ function App() {
             if (error) alert(error.message);
             else {
                 showToast("Article retiré du panier.");
-                fetchData();
+                fetchData(); // Fallback temps réel
             }
         }
     };
@@ -260,13 +271,17 @@ function App() {
             }
             showToast("Commande payée ! Stock mis à jour. 👑");
         }
-        await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
+        const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
+        if (!error) fetchData(); // FORCE REFRESH Fallback temps réel pour corriger le bug de statut
     };
 
     const deleteOrder = async (id: string) => {
         if (confirm("Supprimer définitivement ce panier ?")) {
-            await supabase.from('orders').delete().eq('id', id);
-            if (activeOrderId === id) setActiveOrderId(null);
+            const { error } = await supabase.from('orders').delete().eq('id', id);
+            if (!error) {
+                if (activeOrderId === id) setActiveOrderId(null);
+                fetchData(); // Fallback temps réel
+            }
         }
     };
 
@@ -308,7 +323,8 @@ function App() {
             <nav className="view-tabs">
                 <button className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}><Package size={18} /> Stocks</button>
                 <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
-                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes</button>
+                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes en cours</button>
+                <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => setActiveTab('archives')}><Archive size={18} /> Archives</button>
             </nav>
 
             {/* Bannière de panier actif */}
@@ -452,7 +468,7 @@ function App() {
             {activeTab === 'orders' && (
                 <section className="orders-view">
                     <div className="orders-grid">
-                        {orders.map(order => (
+                        {orders.filter(o => o.status === 'attente').map(order => (
                             <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-focus' : ''}`}>
                                 <div className="order-header">
                                     <div>
@@ -479,13 +495,47 @@ function App() {
                                 <div className="order-footer">
                                     <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
                                     <div className="order-actions">
-                                        <button disabled={order.status === 'attente'} className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Attente</button>
-                                        <button disabled={order.status === 'payé'} className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
+                                        <button disabled className="tab-btn"><Clock size={16} /> En cours</button>
+                                        <button className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
                                     </div>
                                 </div>
                             </div>
                         ))}
-                        {orders.length === 0 && <div className="empty-state">Aucun historique récent (30j).</div>}
+                        {orders.filter(o => o.status === 'attente').length === 0 && <div className="empty-state">Aucune commande en cours.</div>}
+                    </div>
+                </section>
+            )}
+
+            {activeTab === 'archives' && (
+                <section className="orders-view">
+                    <div className="orders-grid">
+                        {orders.filter(o => o.status === 'payé').map(order => (
+                            <div key={order.id} className="glass-card order-card archived-card">
+                                <div className="order-header">
+                                    <div>
+                                        <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
+                                        <span className="status-badge status-payé">Payé</span>
+                                    </div>
+                                    <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>{new Date(order.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <div className="basket-items-list">
+                                    {order.order_items?.map((oi: any) => (
+                                        <div key={oi.id} className="basket-item">
+                                            <span>{oi.items?.title} (x{oi.quantity})</span>
+                                            <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="order-footer">
+                                    <div className="total-tag">Payé: {order.total_price.toFixed(2)} €</div>
+                                    <div className="order-actions">
+                                        <button className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Remettre en cours</button>
+                                        <button className="delete-btn" onClick={() => deleteOrder(order.id)} title="Supprimer Archive"><Trash2 size={16} /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {orders.filter(o => o.status === 'payé').length === 0 && <div className="empty-state">Aucune archive pour le moment.</div>}
                     </div>
                 </section>
             )}
