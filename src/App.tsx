@@ -9,8 +9,8 @@ import {
     Plus,
     Trash2,
     Scan,
-    X,
-    Filter
+    Filter,
+    Calculator
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -33,7 +33,6 @@ function App() {
     const [newItem, setNewItem] = useState({
         title: '',
         ean: '',
-        quantity: '',
         sold_quantity: '0',
         category: 'Général',
         purchase_price: '',
@@ -47,7 +46,7 @@ function App() {
         fetchItems();
 
         const channel = supabase
-            .channel('items-v2-changes')
+            .channel('items-v2.1-changes')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'items' },
@@ -120,6 +119,16 @@ function App() {
         setLoading(false);
     };
 
+    const applyMultiplier = (multiplier: number) => {
+        const purchase = parseFloat(newItem.purchase_price);
+        if (!isNaN(purchase)) {
+            setNewItem(prev => ({
+                ...prev,
+                sale_price: (purchase * multiplier).toFixed(2)
+            }));
+        }
+    };
+
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
         const titleRegex = /^[A-Za-zÀ-ÿ\s]+$/;
@@ -129,7 +138,7 @@ function App() {
         const { error } = await supabase.from('items').insert([{
             title: newItem.title.trim(),
             ean: newItem.ean,
-            quantity: parseInt(newItem.quantity) || 0,
+            quantity: 0, // Désormais par défaut à 0 lors de la création
             sold_quantity: parseInt(newItem.sold_quantity) || 0,
             category: newItem.category,
             purchase_price: parseFloat(newItem.purchase_price) || 0,
@@ -138,7 +147,7 @@ function App() {
         }]);
 
         if (error) alert("Erreur: " + error.message);
-        else setNewItem({ title: '', ean: '', quantity: '', sold_quantity: '0', category: 'Général', purchase_price: '', sale_price: '' });
+        else setNewItem({ title: '', ean: '', sold_quantity: '0', category: 'Général', purchase_price: '', sale_price: '' });
     };
 
     const updateQuantity = async (id: string, field: 'quantity' | 'sold_quantity', delta: number) => {
@@ -249,21 +258,24 @@ function App() {
                                     <option value="Sacs" />
                                 </datalist>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="form-group">
-                                    <label>Prix Achat (€)</label>
-                                    <input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} />
-                                </div>
-                                <div className="form-group">
-                                    <label>Prix Vente (€)</label>
-                                    <input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} />
-                                </div>
+
+                            <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label>Prix Achat (€)</label>
+                                <input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" />
                             </div>
+
+                            <div className="multiplier-grid" style={{ marginBottom: '1rem' }}>
+                                <button type="button" className="multiplier-btn" onClick={() => applyMultiplier(2)}>x2</button>
+                                <button type="button" className="multiplier-btn" onClick={() => applyMultiplier(2.5)}>x2.5</button>
+                                <button type="button" className="multiplier-btn" onClick={() => applyMultiplier(3)}>x3</button>
+                            </div>
+
                             <div className="form-group">
-                                <label>Quantité Initiale</label>
-                                <input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} />
+                                <label>Prix Vente (€)</label>
+                                <input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} placeholder="0.00" />
                             </div>
-                            <button type="submit">Enregistrer</button>
+
+                            <button type="submit" style={{ marginTop: '1rem' }}>Enregistrer</button>
                         </form>
                     </div>
                 </aside>
@@ -290,28 +302,31 @@ function App() {
                                         <div className="item-title">{item.title}</div>
                                         <div className="item-ean">EAN: {item.ean}</div>
                                         <span className="category-badge">{item.category}</span>
+                                        <div className="price-tag" style={{ fontSize: '0.8rem', marginTop: '0.5rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                                            Prix: {item.sale_price.toFixed(2)} €
+                                        </div>
                                     </div>
 
                                     <div className="item-stats">
                                         <div className="stat-group">
                                             <span className="stat-label">Stock</span>
                                             <div className="qty-controls">
-                                                <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
+                                                <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
                                                 <span className="qty-badge">{item.quantity}</span>
-                                                <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
+                                                <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
                                             </div>
                                         </div>
 
                                         <div className="stat-group">
                                             <span className="stat-label">Vendu</span>
                                             <div className="qty-controls">
-                                                <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', -1)}>-</button>
+                                                <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'sold_quantity', -1)}>-</button>
                                                 <span className="qty-badge sold">{item.sold_quantity || 0}</span>
-                                                <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', 1)}>+</button>
+                                                <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'sold_quantity', 1)}>+</button>
                                             </div>
                                         </div>
 
-                                        <button className="delete-btn" onClick={() => deleteItem(item.id)}>
+                                        <button className="delete-btn" type="button" onClick={() => deleteItem(item.id)}>
                                             <Trash2 size={18} />
                                         </button>
                                     </div>

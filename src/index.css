@@ -379,3 +379,29 @@ button:hover {
     padding: 3rem;
     color: var(--text-dim);
 }
+
+.multiplier-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.multiplier-btn {
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--card-border);
+    padding: 0.5rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.multiplier-btn:hover {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(251, 111, 146, 0.2);
+}
