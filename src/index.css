@@ -1,13 +1,13 @@
 :root {
-    --primary: #ff477e;
-    --primary-hover: #ff7096;
-    --bg: #0f0c29;
-    --bg-gradient: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    --card-bg: rgba(255, 255, 255, 0.05);
-    --card-border: rgba(255, 255, 255, 0.1);
-    --text: #ffffff;
-    --text-dim: #b0b0b0;
-    --success: #00f2fe;
+    --primary: #fb6f92;
+    --primary-hover: #ff85a2;
+    --bg: #fff5f8;
+    --bg-gradient: linear-gradient(135deg, #fff5f8, #ffe5ec, #ffc2d1);
+    --card-bg: rgba(255, 255, 255, 0.7);
+    --card-border: rgba(251, 111, 146, 0.2);
+    --text: #5e1c3a;
+    --text-dim: #9d4d72;
+    --success: #ff85a2;
 }
 
 * {
@@ -27,12 +27,12 @@ body {
 
 .glass-card {
     background: var(--card-bg);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
     border: 1px solid var(--card-border);
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border-radius: 24px;
+    padding: 2rem;
+    box-shadow: 0 10px 40px 0 rgba(251, 111, 146, 0.15);
 }
 
 .container {
@@ -102,10 +102,10 @@ label {
 input {
     width: 100%;
     padding: 0.8rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.5);
     border: 1px solid var(--card-border);
-    border-radius: 8px;
-    color: white;
+    border-radius: 12px;
+    color: var(--text);
     font-size: 1rem;
     transition: all 0.3s ease;
 }
@@ -113,16 +113,17 @@ input {
 input:focus {
     outline: none;
     border-color: var(--primary);
-    background: rgba(255, 255, 255, 0.1);
+    background: white;
+    box-shadow: 0 0 10px rgba(251, 111, 146, 0.1);
 }
 
 button {
     width: 100%;
     padding: 0.8rem;
-    background: var(--primary);
+    background: linear-gradient(135deg, #fb6f92, #ff85a2);
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
@@ -185,8 +186,8 @@ button:hover {
 }
 
 .qty-badge {
-    background: rgba(0, 242, 254, 0.1);
-    color: var(--success);
+    background: #ffe5ec;
+    color: var(--primary);
     padding: 0.4rem 0.8rem;
     border-radius: 20px;
     font-weight: 700;

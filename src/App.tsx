@@ -102,7 +102,7 @@ function App() {
                     <img src="/logo.jpg" alt="Lovely Shopping Logo" className="site-logo" />
                 </div>
                 <h1>Lovely Shopping</h1>
-                <p className="subtitle">Système de Gestion des Stocks (Supabase Cloud)</p>
+                <p className="subtitle">Votre Boutique, Votre Style</p>
             </header>
 
             <div className="grid">
