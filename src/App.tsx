@@ -12,7 +12,8 @@ import {
     Users,
     CheckCircle2,
     Clock,
-    ArrowRight
+    ArrowRight,
+    ChevronLeft
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -68,6 +69,8 @@ const CATEGORIES_WITH_EMOJIS = [
 
 function App() {
     const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders'>('inventory');
+    const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+
     const [items, setItems] = useState<Item[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
@@ -84,7 +87,7 @@ function App() {
 
     useEffect(() => {
         fetchData();
-        const channel = supabase.channel('global-v3').on('postgres_changes', { event: '*', schema: 'public' }, () => fetchData()).subscribe();
+        const channel = supabase.channel('global-v3.1').on('postgres_changes', { event: '*', schema: 'public' }, () => fetchData()).subscribe();
         return () => { supabase.removeChannel(channel); };
     }, []);
 
@@ -175,9 +178,20 @@ function App() {
     };
 
     const createOrder = async (customerId: string) => {
+        // Vérifier s'il y a déjà une commande en attente pour ce client
+        const existingOrder = orders.find(o => o.customer_id === customerId && o.status === 'attente');
+        if (existingOrder) {
+            setActiveOrderId(existingOrder.id);
+            setActiveTab('inventory');
+            return;
+        }
+
         const { data: order, error } = await supabase.from('orders').insert([{ customer_id: customerId, status: 'attente', total_price: 0 }]).select().single();
         if (error) alert(error.message);
-        else setActiveTab('orders');
+        else {
+            setActiveOrderId(order.id);
+            setActiveTab('inventory');
+        }
     };
 
     const addItemToOrder = async (orderId: string, item: Item) => {
@@ -210,13 +224,20 @@ function App() {
     };
 
     const deleteOrder = async (id: string) => {
-        if (confirm("Supprimer ce panier ?")) await supabase.from('orders').delete().eq('id', id);
+        if (confirm("Supprimer ce panier ?")) {
+            await supabase.from('orders').delete().eq('id', id);
+            if (activeOrderId === id) setActiveOrderId(null);
+        }
     };
 
     const filteredItems = items.filter(item =>
         (item.title?.toLowerCase().includes(search.toLowerCase()) || item.ean?.includes(search)) &&
         (categoryFilter === 'Tous' || item.category.includes(categoryFilter))
     );
+
+    const activeCustomerName = activeOrderId
+        ? orders.find(o => o.id === activeOrderId)?.customers?.first_name
+        : null;
 
     return (
         <div className="container">
@@ -241,6 +262,20 @@ function App() {
                 <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
                 <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes</button>
             </nav>
+
+            {/* Bannière de panier actif */}
+            {activeOrderId && activeTab === 'inventory' && (
+                <div className="glass-card" style={{ background: 'var(--primary)', color: 'white', padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                        <ShoppingCart size={20} />
+                        <span style={{ fontWeight: 700 }}>Panier de {activeCustomerName} en cours...</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => setActiveTab('orders')}>Voir Panier</button>
+                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Terminer"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'inventory' && (
                 <>
@@ -306,11 +341,21 @@ function App() {
                                                     <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
                                                 </div>
                                             </div>
-                                            <button className="tab-btn" style={{ padding: '0.4rem' }} onClick={() => {
-                                                const order = orders.find(o => o.status === 'attente');
-                                                if (order) addItemToOrder(order.id, item);
-                                                else alert("Veuillez d'abord créer ou sélectionner un panier client.");
-                                            }} title="Ajouter au panier"><ShoppingCart size={16} /></button>
+                                            <button
+                                                className={`tab-btn ${activeOrderId ? 'active' : ''}`}
+                                                style={{ padding: '0.4rem' }}
+                                                onClick={() => {
+                                                    if (activeOrderId) addItemToOrder(activeOrderId, item);
+                                                    else {
+                                                        const order = orders.find(o => o.status === 'attente');
+                                                        if (order) addItemToOrder(order.id, item);
+                                                        else alert("Veuillez d'abord créer ou sélectionner un panier client.");
+                                                    }
+                                                }}
+                                                title="Ajouter au panier"
+                                            >
+                                                <ShoppingCart size={16} />
+                                            </button>
                                             <button className="delete-btn" onClick={() => deleteItem(item.id)}><Trash2 size={18} /></button>
                                         </div>
                                     </div>
@@ -333,13 +378,27 @@ function App() {
                         </form>
                     </div>
                     <div className="customer-grid">
-                        {customers.map(c => (
-                            <div key={c.id} className="glass-card customer-card">
-                                <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                                <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>FB: {c.facebook_pseudo || '-'}</p>
-                                <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem' }} onClick={() => createOrder(c.id)}>Panier <ArrowRight size={16} /></button>
-                            </div>
-                        ))}
+                        {customers.map(c => {
+                            const lastOrder = orders.find(o => o.customer_id === c.id);
+                            return (
+                                <div key={c.id} className="glass-card customer-card">
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <div>
+                                            <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                                            <p style={{ opacity: 0.7, fontSize: '0.9rem', marginBottom: '0.5rem' }}>FB: {c.facebook_pseudo || '-'}</p>
+                                        </div>
+                                        {lastOrder && (
+                                            <span className={`status-badge status-${lastOrder.status}`} style={{ fontSize: '0.6rem' }}>
+                                                Dernier: {lastOrder.status}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                        Ajouter des produits <ArrowRight size={16} />
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
             )}
@@ -348,13 +407,16 @@ function App() {
                 <section className="orders-view">
                     <div className="orders-grid">
                         {orders.map(order => (
-                            <div key={order.id} className="glass-card order-card" style={{ padding: '1.5rem' }}>
+                            <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-order-highlight' : ''}`} style={{ padding: '1.5rem', border: activeOrderId === order.id ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                     <div>
                                         <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
                                         <span className={`status-badge status-${order.status}`}>{order.status}</span>
                                     </div>
-                                    <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button className="qty-btn" onClick={() => { setActiveOrderId(order.id); setActiveTab('inventory'); }} title="Modifier"><Search size={14} /></button>
+                                        <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
+                                    </div>
                                 </div>
                                 <div className="basket-items" style={{ minHeight: '60px', borderTop: '1px solid var(--card-border)', paddingTop: '1rem' }}>
                                     {order.order_items?.map((oi: any) => (
