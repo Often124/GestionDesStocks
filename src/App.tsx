@@ -15,9 +15,13 @@ import {
     ArrowRight,
     X,
     MinusCircle,
-    Archive
+    Archive,
+    FileText,
+    Download
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 interface Item {
     id: string;
@@ -80,7 +84,7 @@ function App() {
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('Tous');
     const [newItem, setNewItem] = useState({
-        title: '', ean: '', category: 'Général', purchase_price: '', sale_price: ''
+        title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '', quantity: '0'
     });
     const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', facebook_pseudo: '' });
 
@@ -109,7 +113,6 @@ function App() {
                 sale_price: (purchase * 1.20).toFixed(2)
             }));
         } else if (newItem.purchase_price === '') {
-            // Correction V3.4: Si vide, on vide le prix de vente
             setNewItem(prev => ({ ...prev, sale_price: '' }));
         }
     }, [newItem.purchase_price]);
@@ -121,7 +124,6 @@ function App() {
 
     const fetchData = async () => {
         setLoading(true);
-        // On ne récupère que les commandes de moins de 31 jours pour l'archive
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 31);
 
@@ -175,14 +177,14 @@ function App() {
             category: `${catObj.emoji} ${catObj.name}`,
             purchase_price: parseFloat(newItem.purchase_price) || 0,
             sale_price: parseFloat(newItem.sale_price) || 0,
-            quantity: 0,
+            quantity: parseInt(newItem.quantity) || 0,
             sold_quantity: 0,
             last_sold_reset: new Date().toISOString().split('T')[0]
         }]);
         if (!error) {
-            setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '' });
+            setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '', quantity: '0' });
             showToast("Article ajouté !");
-            fetchData(); // Fallback temps réel
+            fetchData();
         }
     };
 
@@ -192,13 +194,13 @@ function App() {
         const updates: any = {};
         updates[field] = Math.max(0, (item[field] || 0) + delta);
         const { error } = await supabase.from('items').update(updates).eq('id', id);
-        if (!error) fetchData(); // Fallback temps réel
+        if (!error) fetchData();
     };
 
     const deleteItem = async (id: string) => {
         if (confirm("Supprimer cet article ?")) {
             const { error } = await supabase.from('items').delete().eq('id', id);
-            if (!error) fetchData(); // Fallback temps réel
+            if (!error) fetchData();
         }
     };
 
@@ -208,12 +210,11 @@ function App() {
         if (!error) {
             setNewCustomer({ first_name: '', last_name: '', facebook_pseudo: '' });
             showToast("Client enregistré !");
-            fetchData(); // Fallback temps réel
+            fetchData();
         }
     };
 
     const createOrder = async (customerId: string) => {
-        // SÉCURITÉ : Reprendre le panier en attente s'il existe déjà pour cette personne
         const existingOrder = orders.find(o => o.customer_id === customerId && o.status === 'attente');
         if (existingOrder) {
             setActiveOrderId(existingOrder.id);
@@ -228,7 +229,7 @@ function App() {
             setActiveOrderId(order.id);
             setActiveTab('inventory');
             showToast("Panier ouvert ! 🛍️");
-            fetchData(); // Fallback temps réel
+            fetchData();
         }
     };
 
@@ -243,7 +244,7 @@ function App() {
         if (error) alert(error.message);
         else {
             showToast(`${item.title} ajouté ! ✅`);
-            fetchData(); // Pour le total et Fallback temps réel
+            fetchData();
         }
     };
 
@@ -253,7 +254,7 @@ function App() {
             if (error) alert(error.message);
             else {
                 showToast("Article retiré du panier.");
-                fetchData(); // Fallback temps réel
+                fetchData();
             }
         }
     };
@@ -272,7 +273,7 @@ function App() {
             showToast("Commande payée ! Stock mis à jour. 👑");
         }
         const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
-        if (!error) fetchData(); // FORCE REFRESH Fallback temps réel pour corriger le bug de statut
+        if (!error) fetchData();
     };
 
     const deleteOrder = async (id: string) => {
@@ -280,9 +281,64 @@ function App() {
             const { error } = await supabase.from('orders').delete().eq('id', id);
             if (!error) {
                 if (activeOrderId === id) setActiveOrderId(null);
-                fetchData(); // Fallback temps réel
+                fetchData();
             }
         }
+    };
+
+    const generateInvoice = (order: Order) => {
+        const doc = new jsPDF();
+        const customerName = `${order.customers?.first_name} ${order.customers?.last_name}`;
+
+        // Header
+        doc.setFontSize(22);
+        doc.setTextColor(251, 111, 146); // Pink Lovely
+        doc.text("LOVELY SHOPPING", 105, 20, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text("Facture Provisoire", 105, 27, { align: 'center' });
+
+        // Line separator
+        doc.setDrawColor(251, 111, 146);
+        doc.line(20, 35, 190, 35);
+
+        // Details
+        doc.setFontSize(12);
+        doc.setTextColor(0);
+        doc.text(`Client: ${customerName}`, 20, 45);
+        doc.text(`Date: ${new Date(order.created_at).toLocaleDateString()}`, 20, 52);
+        doc.text(`N° Commande: ${order.id.split('-')[0].toUpperCase()}`, 20, 59);
+
+        // Items
+        const tableData = (order.order_items || []).map(oi => [
+            oi.items?.title || "Article inconnu",
+            oi.quantity,
+            `${oi.unit_price.toFixed(2)} €`,
+            `${(oi.quantity * oi.unit_price).toFixed(2)} €`
+        ]);
+
+        autoTable(doc, {
+            startY: 70,
+            head: [['Article', 'Qté', 'Prix Unitaire', 'Total']],
+            body: tableData,
+            headStyles: { fillColor: [251, 111, 146] },
+            margin: { horizontal: 20 },
+            theme: 'grid'
+        });
+
+        // Footer Total
+        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(`TOTAL À PAYER: ${order.total_price.toFixed(2)} €`, 190, finalY, { align: 'right' });
+
+        // Legal mention
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.text("Merci pour votre confiance ! Lovely Shopping vous souhaite une agréable journée.", 105, 280, { align: 'center' });
+
+        doc.save(`Facture_${customerName.replace(' ', '_')}.pdf`);
     };
 
     const filteredItems = items.filter(item =>
@@ -296,7 +352,6 @@ function App() {
 
     return (
         <div className="container">
-            {/* Toast Notification */}
             {toast.visible && (
                 <div className="glass-card" style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'var(--primary)', color: 'white', padding: '0.8rem 1.5rem', borderRadius: '12px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.8rem', animation: 'fadeInDown 0.3s ease-out' }}>
                     <CheckCircle2 size={18} />
@@ -323,11 +378,10 @@ function App() {
             <nav className="view-tabs">
                 <button className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}><Package size={18} /> Stocks</button>
                 <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
-                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes en cours</button>
-                <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => setActiveTab('archives')}><Archive size={18} /> Archives</button>
+                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Commandes en cours</button>
+                <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => { setActiveTab('archives'); setActiveOrderId(null); }}><Archive size={18} /> Archives</button>
             </nav>
 
-            {/* Bannière de panier actif */}
             {activeOrderId && activeTab === 'inventory' && (
                 <div className="glass-card active-basket-banner">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
@@ -335,7 +389,7 @@ function App() {
                         <span style={{ fontWeight: 700 }}>Remplissage du panier de {activeCustomerName}...</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => setActiveTab('orders')}>Valider Panier</button>
+                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}>Valider Panier</button>
                         <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Changer de client"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
                     </div>
                 </div>
@@ -368,6 +422,7 @@ function App() {
                                             {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
                                         </select>
                                     </div>
+                                    <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
                                     <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
                                     <div className="multiplier-grid">
                                         {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
@@ -476,7 +531,7 @@ function App() {
                                         <span className={`status-badge status-${order.status}`}>{order.status}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button className="qty-btn" onClick={() => { setActiveOrderId(order.id); setActiveTab('inventory'); }} title="Modifier"><ShoppingCart size={14} /></button>
+                                        <button className="qty-btn" onClick={() => generateInvoice(order)} title="Générer Facture PDF"><FileText size={16} /></button>
                                         <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
                                     </div>
                                 </div>
@@ -495,7 +550,6 @@ function App() {
                                 <div className="order-footer">
                                     <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
                                     <div className="order-actions">
-                                        <button disabled className="tab-btn"><Clock size={16} /> En cours</button>
                                         <button className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
                                     </div>
                                 </div>
@@ -516,7 +570,7 @@ function App() {
                                         <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
                                         <span className="status-badge status-payé">Payé</span>
                                     </div>
-                                    <span style={{ fontSize: '0.7rem', opacity: 0.5 }}>{new Date(order.created_at).toLocaleDateString()}</span>
+                                    <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture PDF"><Download size={16} /></button>
                                 </div>
                                 <div className="basket-items-list">
                                     {order.order_items?.map((oi: any) => (
