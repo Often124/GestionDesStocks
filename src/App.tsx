@@ -13,7 +13,7 @@ import {
     CheckCircle2,
     Clock,
     ArrowRight,
-    ChevronLeft
+    X
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -84,12 +84,23 @@ function App() {
 
     const [loading, setLoading] = useState(true);
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
+    const [toast, setToast] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
     useEffect(() => {
         fetchData();
-        const channel = supabase.channel('global-v3.1').on('postgres_changes', { event: '*', schema: 'public' }, () => fetchData()).subscribe();
-        return () => { supabase.removeChannel(channel); };
+        const channels = [
+            supabase.channel('public:items').on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, () => fetchData()).subscribe(),
+            supabase.channel('public:customers').on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData()).subscribe(),
+            supabase.channel('public:orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData()).subscribe(),
+            supabase.channel('public:order_items').on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchData()).subscribe()
+        ];
+        return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, []);
+
+    const showToast = (message: string) => {
+        setToast({ message, visible: true });
+        setTimeout(() => setToast({ message: '', visible: false }), 3000);
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -110,24 +121,15 @@ function App() {
             setItems(processedItems);
         }
         if (customersRes.data) setCustomers(customersRes.data);
-        if (ordersRes.data) setOrders(ordersRes.data as Order[]);
+        if (ordersRes.data) {
+            const ordersData = (ordersRes.data as any[]).map(o => ({
+                ...o,
+                total_price: o.order_items?.reduce((acc: number, item: any) => acc + (item.unit_price * item.quantity), 0) || 0
+            }));
+            setOrders(ordersData as Order[]);
+        }
         setLoading(false);
     };
-
-    // Logique du scanner
-    useEffect(() => {
-        let scanner: Html5QrcodeScanner | null = null;
-        if (scannerConfig.active) {
-            scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-            scanner.render((decodedText) => {
-                if (scannerConfig.target === 'new') setNewItem(prev => ({ ...prev, ean: decodedText }));
-                else setSearch(decodedText);
-                setScannerConfig({ active: false, target: 'new' });
-                if (scanner) scanner.clear();
-            }, (err) => console.warn(err));
-        }
-        return () => { if (scanner) scanner.clear().catch(() => { }); };
-    }, [scannerConfig]);
 
     const applyMultiplier = (multiplier: number) => {
         const purchase = parseFloat(newItem.purchase_price);
@@ -142,9 +144,6 @@ function App() {
 
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!/^[A-Za-zÀ-ÿ\s]+$/.test(newItem.title)) return alert("Lettres uniquement");
-        if (!/^\d{13}$/.test(newItem.ean)) return alert("EAN 13 chiffres");
-
         const catObj = CATEGORIES_WITH_EMOJIS.find(c => c.name === newItem.category) || CATEGORIES_WITH_EMOJIS[0];
         const { error } = await supabase.from('items').insert([{
             ...newItem,
@@ -156,7 +155,10 @@ function App() {
             sold_quantity: 0,
             last_sold_reset: new Date().toISOString().split('T')[0]
         }]);
-        if (!error) setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '' });
+        if (!error) {
+            setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '' });
+            showToast("Article ajouté au stock !");
+        }
     };
 
     const updateQuantity = async (id: string, field: 'quantity' | 'sold_quantity', delta: number) => {
@@ -174,11 +176,13 @@ function App() {
     const handleAddCustomer = async (e: React.FormEvent) => {
         e.preventDefault();
         const { error } = await supabase.from('customers').insert([newCustomer]);
-        if (!error) setNewCustomer({ first_name: '', last_name: '', facebook_pseudo: '' });
+        if (!error) {
+            setNewCustomer({ first_name: '', last_name: '', facebook_pseudo: '' });
+            showToast("Client enregistré !");
+        }
     };
 
     const createOrder = async (customerId: string) => {
-        // Vérifier s'il y a déjà une commande en attente pour ce client
         const existingOrder = orders.find(o => o.customer_id === customerId && o.status === 'attente');
         if (existingOrder) {
             setActiveOrderId(existingOrder.id);
@@ -191,6 +195,7 @@ function App() {
         else {
             setActiveOrderId(order.id);
             setActiveTab('inventory');
+            showToast("Nouveau panier créé !");
         }
     };
 
@@ -201,10 +206,11 @@ function App() {
             quantity: 1,
             unit_price: item.sale_price
         }]);
+
         if (error) alert(error.message);
         else {
-            const order = orders.find(o => o.id === orderId);
-            if (order) await supabase.from('orders').update({ total_price: (order.total_price || 0) + item.sale_price }).eq('id', orderId);
+            showToast(`${item.title} ajouté au panier ! 🛍️`);
+            fetchData(); // Force refresh for total
         }
     };
 
@@ -219,6 +225,7 @@ function App() {
                     }).eq('id', item.id);
                 }
             }
+            showToast("Commande payée et stock déduit ! ✅");
         }
         await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
     };
@@ -241,6 +248,14 @@ function App() {
 
     return (
         <div className="container">
+            {/* Toast Notification */}
+            {toast.visible && (
+                <div className="glass-card" style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'var(--primary)', color: 'white', padding: '0.8rem 1.5rem', borderRadius: '12px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.8rem', animation: 'fadeInDown 0.3s ease-out' }}>
+                    <CheckCircle2 size={18} />
+                    {toast.message}
+                </div>
+            )}
+
             {scannerConfig.active && (
                 <div className="scanner-container">
                     <div className="glass-card" style={{ width: '90%', maxWidth: '500px' }}>
@@ -263,16 +278,15 @@ function App() {
                 <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes</button>
             </nav>
 
-            {/* Bannière de panier actif */}
             {activeOrderId && activeTab === 'inventory' && (
-                <div className="glass-card" style={{ background: 'var(--primary)', color: 'white', padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px' }}>
+                <div className="glass-card" style={{ background: 'var(--primary)', color: 'white', padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px', boxShadow: '0 4px 15px rgba(251, 111, 146, 0.4)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
                         <ShoppingCart size={20} />
                         <span style={{ fontWeight: 700 }}>Panier de {activeCustomerName} en cours...</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => setActiveTab('orders')}>Voir Panier</button>
-                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Terminer"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
+                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Terminer"><X size={18} /></button>
                     </div>
                 </div>
             )}
@@ -407,7 +421,7 @@ function App() {
                 <section className="orders-view">
                     <div className="orders-grid">
                         {orders.map(order => (
-                            <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-order-highlight' : ''}`} style={{ padding: '1.5rem', border: activeOrderId === order.id ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}>
+                            <div key={order.id} className="glass-card order-card" style={{ padding: '1.5rem', border: activeOrderId === order.id ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                     <div>
                                         <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
