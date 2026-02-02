@@ -9,8 +9,7 @@ import {
     Plus,
     Trash2,
     Scan,
-    Filter,
-    Calculator
+    Filter
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -26,6 +25,16 @@ interface Item {
     sale_price: number;
 }
 
+const CATEGORIES_WITH_EMOJIS = [
+    { name: 'Général', emoji: '📦' },
+    { name: 'Vêtement', emoji: '👗' },
+    { name: 'Beauté', emoji: '💄' },
+    { name: 'Sac', emoji: '👜' },
+    { name: 'Accessoires', emoji: '🎀' },
+    { name: 'Bougie', emoji: '🕯️' },
+    { name: 'Parfum', emoji: '✨' }
+];
+
 function App() {
     const [items, setItems] = useState<Item[]>([]);
     const [search, setSearch] = useState('');
@@ -39,14 +48,14 @@ function App() {
         sale_price: ''
     });
     const [loading, setLoading] = useState(true);
-    const [showScanner, setShowScanner] = useState(false);
+    const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
 
     // Charger les articles au démarrage
     useEffect(() => {
         fetchItems();
 
         const channel = supabase
-            .channel('items-v2.1-changes')
+            .channel('items-v2.2-changes')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'items' },
@@ -69,14 +78,18 @@ function App() {
         };
     }, []);
 
-    // Logique du scanner
+    // Logique du scanner universel
     useEffect(() => {
         let scanner: Html5QrcodeScanner | null = null;
-        if (showScanner) {
+        if (scannerConfig.active) {
             scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
             scanner.render((decodedText) => {
-                setNewItem(prev => ({ ...prev, ean: decodedText }));
-                setShowScanner(false);
+                if (scannerConfig.target === 'new') {
+                    setNewItem(prev => ({ ...prev, ean: decodedText }));
+                } else {
+                    setSearch(decodedText);
+                }
+                setScannerConfig({ active: false, target: 'new' });
                 if (scanner) scanner.clear();
             }, (error) => {
                 console.warn(error);
@@ -87,7 +100,7 @@ function App() {
                 scanner.clear().catch(err => console.error("Scanner clear error", err));
             }
         };
-    }, [showScanner]);
+    }, [scannerConfig]);
 
     const fetchItems = async () => {
         setLoading(true);
@@ -135,12 +148,15 @@ function App() {
         if (!titleRegex.test(newItem.title)) return alert("L'intitulé doit contenir uniquement des lettres.");
         if (!/^\d{13}$/.test(newItem.ean)) return alert("L'EAN doit faire 13 chiffres.");
 
+        const catObj = CATEGORIES_WITH_EMOJIS.find(c => c.name === newItem.category) || CATEGORIES_WITH_EMOJIS[0];
+        const categoryWithEmoji = `${catObj.emoji} ${catObj.name}`;
+
         const { error } = await supabase.from('items').insert([{
             title: newItem.title.trim(),
             ean: newItem.ean,
-            quantity: 0, // Désormais par défaut à 0 lors de la création
+            quantity: 0,
             sold_quantity: parseInt(newItem.sold_quantity) || 0,
-            category: newItem.category,
+            category: categoryWithEmoji,
             purchase_price: parseFloat(newItem.purchase_price) || 0,
             sale_price: parseFloat(newItem.sale_price) || 0,
             last_sold_reset: new Date().toISOString().split('T')[0]
@@ -174,25 +190,26 @@ function App() {
 
     const filteredItems = items.filter(item =>
         (item.title?.toLowerCase().includes(search.toLowerCase()) || item.ean?.includes(search)) &&
-        (categoryFilter === 'Tous' || item.category === categoryFilter)
+        (categoryFilter === 'Tous' || item.category.includes(categoryFilter))
     );
 
-    // Statistiques Financières
     const totalStockValue = items.reduce((acc, item) => acc + (item.quantity * item.purchase_price), 0);
     const dailyRevenue = items.reduce((acc, item) => acc + (item.sold_quantity * item.sale_price), 0);
     const dailyProfit = items.reduce((acc, item) => acc + (item.sold_quantity * (item.sale_price - item.purchase_price)), 0);
     const lowStockCount = items.filter(item => item.quantity <= 1).length;
 
-    const categories = ['Tous', ...new Set(items.map(i => i.category || 'Général'))];
+    const activeCategories = ['Tous', ...CATEGORIES_WITH_EMOJIS.map(c => c.name)];
 
     return (
         <div className="container">
-            {showScanner && (
+            {scannerConfig.active && (
                 <div className="scanner-container">
                     <div className="glass-card" style={{ width: '90%', maxWidth: '500px' }}>
-                        <h2 style={{ marginBottom: '1rem', color: 'white' }}>Scanner le code EAN</h2>
+                        <h2 style={{ marginBottom: '1rem', color: 'white' }}>
+                            {scannerConfig.target === 'search' ? 'Scanner pour rechercher' : 'Scanner le code EAN'}
+                        </h2>
                         <div id="reader"></div>
-                        <button className="scanner-btn" onClick={() => setShowScanner(false)}>Fermer</button>
+                        <button className="scanner-btn" onClick={() => setScannerConfig({ active: false, target: 'new' })}>Fermer</button>
                     </div>
                 </div>
             )}
@@ -244,19 +261,22 @@ function App() {
                             <div className="form-group">
                                 <label style={{ display: 'flex', justifyContent: 'space-between' }}>
                                     Code EAN
-                                    <Scan size={16} style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setShowScanner(true)} />
+                                    <Scan size={16} style={{ cursor: 'pointer', color: 'var(--primary)' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} />
                                 </label>
                                 <input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required />
                             </div>
                             <div className="form-group">
                                 <label>Catégorie</label>
-                                <input type="text" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} list="cat-suggestions" />
-                                <datalist id="cat-suggestions">
-                                    <option value="Robes" />
-                                    <option value="Bijoux" />
-                                    <option value="Accessoires" />
-                                    <option value="Sacs" />
-                                </datalist>
+                                <select
+                                    className="glass-card"
+                                    style={{ width: '100%', padding: '0.8rem', background: 'rgba(255,255,255,0.5)' }}
+                                    value={newItem.category}
+                                    onChange={e => setNewItem({ ...newItem, category: e.target.value })}
+                                >
+                                    {CATEGORIES_WITH_EMOJIS.map(c => (
+                                        <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div className="form-group" style={{ marginBottom: '0.5rem' }}>
@@ -284,12 +304,17 @@ function App() {
                     <div className="search-container" style={{ display: 'flex', gap: '1rem' }}>
                         <div style={{ position: 'relative', flex: 1 }}>
                             <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} size={18} />
-                            <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem' }} placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+                            <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem', paddingRight: '2.8rem' }} placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+                            <Scan
+                                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--primary)' }}
+                                size={18}
+                                onClick={() => setScannerConfig({ active: true, target: 'search' })}
+                            />
                         </div>
-                        <div style={{ position: 'relative', width: '150px' }}>
+                        <div style={{ position: 'relative', width: '160px' }}>
                             <Filter style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)' }} size={16} />
                             <select className="glass-card" style={{ width: '100%', paddingLeft: '2.5rem', appearance: 'none', height: '100%' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                {activeCategories.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                     </div>
@@ -332,6 +357,9 @@ function App() {
                                     </div>
                                 </div>
                             ))}
+                            {filteredItems.length === 0 && (
+                                <div className="empty-state">Aucun article trouvé.</div>
+                            )}
                         </div>
                     </div>
                 </main>
