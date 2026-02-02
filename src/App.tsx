@@ -18,7 +18,11 @@ import {
     Archive,
     FileText,
     Download,
-    Edit
+    Edit,
+    Moon,
+    Sun,
+    Star,
+    BarChart3
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import jsPDF from 'jspdf'
@@ -51,6 +55,7 @@ interface Order {
     created_at: string;
     customers?: Customer;
     order_items?: OrderItem[];
+    reference?: string;
 }
 
 interface OrderItem {
@@ -75,8 +80,9 @@ const CATEGORIES_WITH_EMOJIS = [
 ];
 
 function App() {
-    const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders' | 'archives'>('inventory');
+    const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders' | 'archives' | 'stats'>('inventory');
     const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('theme') as 'light' | 'dark') || 'light');
 
     const [items, setItems] = useState<Item[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -89,10 +95,20 @@ function App() {
     });
     const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', facebook_pseudo: '' });
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+    const [viewingHistory, setViewingHistory] = useState<Customer | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
     const [toast, setToast] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
+
+    const generateOrderRef = () => {
+        return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    };
+
+    useEffect(() => {
+        document.body.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+    }, [theme]);
 
     // Subscription globale pour le temps réel
     useEffect(() => {
@@ -259,7 +275,12 @@ function App() {
             return;
         }
 
-        const { data: order, error } = await supabase.from('orders').insert([{ customer_id: customerId, status: 'attente', total_price: 0 }]).select().single();
+        const { data: order, error } = await supabase.from('orders').insert([{
+            customer_id: customerId,
+            status: 'attente',
+            total_price: 0,
+            reference: generateOrderRef()
+        }]).select().single();
         if (error) alert(error.message);
         else {
             setActiveOrderId(order.id);
@@ -449,6 +470,9 @@ function App() {
 
     return (
         <div className="container">
+            <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
+                {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
             {toast.visible && (
                 <div className="glass-card" style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'var(--primary)', color: 'white', padding: '0.8rem 1.5rem', borderRadius: '12px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.8rem', animation: 'fadeInDown 0.3s ease-out' }}>
                     <CheckCircle2 size={18} />
@@ -498,6 +522,7 @@ function App() {
                 <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
                 <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Panier</button>
                 <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => { setActiveTab('archives'); setActiveOrderId(null); }}><Archive size={18} /> Archives</button>
+                <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => { setActiveTab('stats'); setActiveOrderId(null); }}><BarChart3 size={18} /> Stats</button>
             </nav>
 
             {activeOrderId && activeTab === 'inventory' && (
@@ -627,6 +652,7 @@ function App() {
                                             <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
                                         </div>
                                         <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button className="qty-btn" onClick={() => setViewingHistory(c)} title="Historique"><Clock size={16} /></button>
                                             <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
                                             <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
                                         </div>
@@ -723,7 +749,94 @@ function App() {
                     </div>
                 </section>
             )}
-            <div className="version-badge">V3.9.1</div>
+            {activeTab === 'stats' && (
+                <section className="stats-view">
+                    <div className="grid">
+                        <div className="glass-card">
+                            <h2><Star size={20} color="#FFD700" /> Top 5 Produits</h2>
+                            <div className="item-list" style={{ marginTop: '1.5rem' }}>
+                                {[...items].sort((a, b) => b.sold_quantity - a.sold_quantity).slice(0, 5).map((item, idx) => (
+                                    <div key={item.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
+                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
+                                            <div>
+                                                <div className="item-title">{item.title}</div>
+                                                <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.sold_quantity} vendus</div>
+                                            </div>
+                                        </div>
+                                        <div className="price-tag">{(item.sold_quantity * item.sale_price).toFixed(2)} €</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="glass-card">
+                            <h2><Users size={20} color="#fb6f92" /> Meilleures Clientes (V.I.P)</h2>
+                            <div className="item-list" style={{ marginTop: '1.5rem' }}>
+                                {customers.map(c => {
+                                    const totalSpend = orders
+                                        .filter(o => o.customer_id === c.id && o.status === 'payé')
+                                        .reduce((acc, curr) => acc + curr.total_price, 0);
+                                    return { ...c, totalSpend };
+                                })
+                                    .sort((a, b) => b.totalSpend - a.totalSpend)
+                                    .slice(0, 5)
+                                    .map((vip, idx) => (
+                                        <div key={vip.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
+                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
+                                                <div>
+                                                    <div className="item-title">{vip.first_name} {vip.last_name}</div>
+                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>V.I.P Lovely ✨</div>
+                                                </div>
+                                            </div>
+                                            <div className="price-tag">{vip.totalSpend.toFixed(2)} €</div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            )}
+            {viewingHistory && (
+                <div className="scanner-container" style={{ zIndex: 1100 }}>
+                    <div className="glass-card" style={{ width: '95%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <div>
+                                <h2 style={{ margin: 0 }}>Historique : {viewingHistory.first_name}</h2>
+                                <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>Toutes les commandes passées</p>
+                            </div>
+                            <button className="delete-btn" onClick={() => setViewingHistory(null)}><X size={24} /></button>
+                        </div>
+                        <div className="history-list">
+                            {orders.filter(o => o.customer_id === viewingHistory.id && o.status === 'payé')
+                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                .map(order => (
+                                    <div key={order.id} className="glass-card history-item" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                            <span style={{ fontWeight: 700 }}>{order.reference || `#${order.id.substring(0, 4)}`}</span>
+                                            <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{new Date(order.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                        <div style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                                            {order.order_items?.map(oi => (
+                                                <div key={oi.id} style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                                                    <span>{oi.items?.title} x{oi.quantity}</span>
+                                                    <span>{(oi.quantity * oi.unit_price).toFixed(2)}€</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div style={{ textAlign: 'right', fontWeight: 800, color: 'var(--primary)' }}>
+                                            Total: {order.total_price.toFixed(2)} €
+                                        </div>
+                                    </div>
+                                ))}
+                            {orders.filter(o => o.customer_id === viewingHistory.id && o.status === 'payé').length === 0 && (
+                                <p style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>Aucune commande passée pour ce client.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            <div className="version-badge">V4.0.0 Pro</div>
         </div>
     )
 }

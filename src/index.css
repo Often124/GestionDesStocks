@@ -812,3 +812,43 @@ button:hover {
         grid-template-columns: 1fr;
     }
 }
+
+.theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--primary);
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2000;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.theme-toggle:hover {
+    transform: rotate(15deg) scale(1.1);
+    box-shadow: 0 8px 25px rgba(251, 111, 146, 0.3);
+}
+
+[data-theme='dark'] .site-logo {
+    background: #1a1a1a;
+    box-shadow: 0 0 30px rgba(251, 111, 146, 0.2);
+}
+
+.stat-card.top-performer {
+    background: linear-gradient(135deg, rgba(251, 111, 146, 0.2), rgba(255, 215, 0, 0.1)) !important;
+    border: 1px solid rgba(255, 215, 0, 0.3) !important;
+}
+
+.history-item {
+    border-left: 3px solid var(--primary);
+    padding-left: 1rem;
+    margin-bottom: 1rem;
+}
