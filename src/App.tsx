@@ -61,13 +61,28 @@ function App() {
 
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newItem.title || !newItem.ean || !newItem.quantity) return;
+
+        // Validation Intitulé (Lettres uniquement, espaces autorisés)
+        const titleRegex = /^[A-Za-zÀ-ÿ\s]+$/;
+        if (!titleRegex.test(newItem.title)) {
+            alert("L'intitulé ne doit contenir que des lettres.");
+            return;
+        }
+
+        // Validation EAN (13 chiffres exactement)
+        const eanRegex = /^\d{13}$/;
+        if (!eanRegex.test(newItem.ean)) {
+            alert("Le code EAN doit comporter exactement 13 chiffres.");
+            return;
+        }
+
+        if (!newItem.quantity) return;
 
         const { error } = await supabase
             .from('items')
             .insert([
                 {
-                    title: newItem.title,
+                    title: newItem.title.trim(),
                     ean: newItem.ean,
                     quantity: parseInt(newItem.quantity),
                     sold_quantity: parseInt(newItem.sold_quantity) || 0,
@@ -143,8 +158,11 @@ function App() {
                                     type="text"
                                     value={newItem.title}
                                     onChange={e => setNewItem({ ...newItem, title: e.target.value })}
-                                    placeholder="Ex: T-shirt en soie"
+                                    placeholder="Ex: Robe en soie"
                                     disabled={loading}
+                                    required
+                                    pattern="[A-Za-zÀ-ÿ\s]+"
+                                    title="Lettres uniquement"
                                 />
                             </div>
                             <div className="form-group">
@@ -153,8 +171,12 @@ function App() {
                                     type="text"
                                     value={newItem.ean}
                                     onChange={e => setNewItem({ ...newItem, ean: e.target.value })}
-                                    placeholder="Ex: 3600523..."
+                                    placeholder="13 chiffres (Ex: 3600523...)"
                                     disabled={loading}
+                                    required
+                                    maxLength={13}
+                                    pattern="\d{13}"
+                                    title="Exactement 13 chiffres"
                                 />
                             </div>
                             <div className="form-group">
