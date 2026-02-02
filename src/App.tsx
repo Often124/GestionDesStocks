@@ -418,7 +418,7 @@ function App() {
         doc.text("DÉTAILS COMMANDE:", 130, 55);
         doc.setFont("helvetica", "normal");
         doc.text(`Date: ${new Date(order.created_at).toLocaleDateString()}`, 130, 62);
-        doc.text(`Référence: #${order.id.split('-')[0].toUpperCase()}`, 130, 67);
+        doc.text(`Référence: ${order.reference || '#' + order.id.split('-')[0].toUpperCase()}`, 130, 67);
 
         // Table
         const tableData = (order.order_items || []).map(oi => [
