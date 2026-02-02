@@ -85,11 +85,19 @@ function App() {
         const item = items.find(i => i.id === id);
         if (!item) return;
 
+        const updates: any = {};
         const newValue = Math.max(0, (item[field] || 0) + delta);
+        updates[field] = newValue;
+
+        // Si on change la quantité vendue, on ajuste le stock en sens inverse
+        if (field === 'sold_quantity') {
+            const stockDelta = -delta;
+            updates.quantity = Math.max(0, (item.quantity || 0) + stockDelta);
+        }
 
         const { error } = await supabase
             .from('items')
-            .update({ [field]: newValue })
+            .update(updates)
             .eq('id', id);
 
         if (error) {
