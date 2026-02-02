@@ -7,6 +7,7 @@ interface Item {
     ean: string;
     quantity: number;
     sold_quantity: number;
+    last_sold_reset: string;
 }
 
 function App() {
@@ -54,7 +55,30 @@ function App() {
         if (error) {
             console.error('Erreur lors du chargement des articles:', error);
         } else {
-            setItems(data || []);
+            const today = new Date().toISOString().split('T')[0];
+            const itemsToReset: string[] = [];
+
+            const processedItems = (data || []).map((item: Item) => {
+                // Si la date de réinitialisation est différente d'aujourd'hui, on reset localement
+                // et on prépare la mise à jour en base
+                if (item.last_sold_reset !== today) {
+                    itemsToReset.push(item.id);
+                    return { ...item, sold_quantity: 0, last_sold_reset: today };
+                }
+                return item;
+            });
+
+            setItems(processedItems);
+
+            // Reset en base de données pour les articles concernés
+            if (itemsToReset.length > 0) {
+                await Promise.all(itemsToReset.map(id =>
+                    supabase
+                        .from('items')
+                        .update({ sold_quantity: 0, last_sold_reset: today })
+                        .eq('id', id)
+                ));
+            }
         }
         setLoading(false);
     };
@@ -62,14 +86,14 @@ function App() {
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Validation Intitulé (Lettres uniquement, espaces autorisés)
+        // Validation Intitulé (Lettres uniquement)
         const titleRegex = /^[A-Za-zÀ-ÿ\s]+$/;
         if (!titleRegex.test(newItem.title)) {
             alert("L'intitulé ne doit contenir que des lettres.");
             return;
         }
 
-        // Validation EAN (13 chiffres exactement)
+        // Validation EAN (13 chiffres)
         const eanRegex = /^\d{13}$/;
         if (!eanRegex.test(newItem.ean)) {
             alert("Le code EAN doit comporter exactement 13 chiffres.");
@@ -77,6 +101,8 @@ function App() {
         }
 
         if (!newItem.quantity) return;
+
+        const today = new Date().toISOString().split('T')[0];
 
         const { error } = await supabase
             .from('items')
@@ -86,6 +112,7 @@ function App() {
                     ean: newItem.ean,
                     quantity: parseInt(newItem.quantity),
                     sold_quantity: parseInt(newItem.sold_quantity) || 0,
+                    last_sold_reset: today
                 },
             ]);
 
@@ -104,10 +131,10 @@ function App() {
         const newValue = Math.max(0, (item[field] || 0) + delta);
         updates[field] = newValue;
 
-        // Si on change la quantité vendue, on ajuste le stock en sens inverse
         if (field === 'sold_quantity') {
             const stockDelta = -delta;
             updates.quantity = Math.max(0, (item.quantity || 0) + stockDelta);
+            updates.last_sold_reset = new Date().toISOString().split('T')[0];
         }
 
         const { error } = await supabase
@@ -236,22 +263,22 @@ function App() {
                                             <div className="stat-group">
                                                 <span className="stat-label">Stock</span>
                                                 <div className="qty-controls">
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
+                                                    <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
                                                     <span className="qty-badge">{item.quantity}</span>
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
+                                                    <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
                                                 </div>
                                             </div>
 
                                             <div className="stat-group">
-                                                <span className="stat-label">Vendu</span>
+                                                <span className="stat-label">Vendu (Jour)</span>
                                                 <div className="qty-controls">
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', -1)}>-</button>
+                                                    <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'sold_quantity', -1)}>-</button>
                                                     <span className="qty-badge sold">{item.sold_quantity || 0}</span>
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', 1)}>+</button>
+                                                    <button className="qty-btn" type="button" onClick={() => updateQuantity(item.id, 'sold_quantity', 1)}>+</button>
                                                 </div>
                                             </div>
 
-                                            <button className="delete-btn" onClick={() => deleteItem(item.id)} title="Supprimer">
+                                            <button className="delete-btn" type="button" onClick={() => deleteItem(item.id)} title="Supprimer">
                                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                     <polyline points="3 6 5 6 21 6"></polyline>
                                                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
