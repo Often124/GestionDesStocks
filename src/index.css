@@ -464,6 +464,130 @@ button:hover {
     }
 }
 
+@keyframes pulse-glow {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(251, 111, 146, 0.7);
+    }
+
+    70% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(251, 111, 146, 0);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(251, 111, 146, 0);
+    }
+}
+
+.active-basket-banner {
+    background: linear-gradient(135deg, var(--primary), #ff85a1) !important;
+    border: none !important;
+    box-shadow: 0 5px 20px rgba(251, 111, 146, 0.4);
+    animation: fadeInDown 0.4s ease-out;
+}
+
+.pulse-icon {
+    background: white;
+    color: var(--primary);
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    animation: pulse-glow 2s infinite;
+}
+
+.add-basket-refined {
+    background: var(--glass-bg);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    padding: 0.6rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+}
+
+.add-basket-refined:hover {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.add-basket-refined.highlight {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 10px rgba(251, 111, 146, 0.3);
+}
+
+.add-badge {
+    background: #38b000;
+    color: white;
+    font-size: 0.6rem;
+    padding: 2px 4px;
+    border-radius: 4px;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+}
+
+.remove-item-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.remove-item-btn:hover {
+    opacity: 1;
+}
+
+.basket-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.8rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.order-footer {
+    border-top: 1px solid var(--card-border);
+    padding-top: 1rem;
+    margin-top: 1rem;
+}
+
+.order-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.pay-btn {
+    background: #38b000 !important;
+    flex: 1;
+}
+
+.active-focus {
+    border: 2px solid var(--primary) !important;
+    box-shadow: 0 8px 30px rgba(251, 111, 146, 0.2) !important;
+}
+
+/* Cleanup styles */
 .empty-state {
     text-align: center;
     padding: 3rem;

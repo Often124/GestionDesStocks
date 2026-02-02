@@ -13,7 +13,8 @@ import {
     CheckCircle2,
     Clock,
     ArrowRight,
-    X
+    X,
+    MinusCircle
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 
@@ -86,6 +87,7 @@ function App() {
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
     const [toast, setToast] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
+    // Subscription globale pour le temps réel (plus besoin de rafraîchir)
     useEffect(() => {
         fetchData();
         const channels = [
@@ -97,6 +99,17 @@ function App() {
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, []);
 
+    // Calcul automatique de la TVA (x1.20) quand le prix d'achat change
+    useEffect(() => {
+        const purchase = parseFloat(newItem.purchase_price);
+        if (!isNaN(purchase) && purchase > 0) {
+            setNewItem(prev => ({
+                ...prev,
+                sale_price: (purchase * 1.20).toFixed(2)
+            }));
+        }
+    }, [newItem.purchase_price]);
+
     const showToast = (message: string) => {
         setToast({ message, visible: true });
         setTimeout(() => setToast({ message: '', visible: false }), 3000);
@@ -104,10 +117,17 @@ function App() {
 
     const fetchData = async () => {
         setLoading(true);
+        // On ne récupère que les commandes de moins de 31 jours pour l'archive
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 31);
+
         const [itemsRes, customersRes, ordersRes] = await Promise.all([
             supabase.from('items').select('*').order('created_at', { ascending: false }),
             supabase.from('customers').select('*').order('last_name', { ascending: true }),
-            supabase.from('orders').select('*, customers(*), order_items(*, items(*))').order('created_at', { ascending: false })
+            supabase.from('orders')
+                .select('*, customers(*), order_items(*, items(*))')
+                .gt('created_at', thirtyDaysAgo.toISOString())
+                .order('created_at', { ascending: false })
         ]);
 
         if (itemsRes.data) {
@@ -157,7 +177,7 @@ function App() {
         }]);
         if (!error) {
             setNewItem({ title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '' });
-            showToast("Article ajouté au stock !");
+            showToast("Article ajouté !");
         }
     };
 
@@ -183,10 +203,12 @@ function App() {
     };
 
     const createOrder = async (customerId: string) => {
+        // SÉCURITÉ : Reprendre le panier en attente s'il existe déjà pour cette personne
         const existingOrder = orders.find(o => o.customer_id === customerId && o.status === 'attente');
         if (existingOrder) {
             setActiveOrderId(existingOrder.id);
             setActiveTab('inventory');
+            showToast("Reprise du panier en cours...");
             return;
         }
 
@@ -195,7 +217,7 @@ function App() {
         else {
             setActiveOrderId(order.id);
             setActiveTab('inventory');
-            showToast("Nouveau panier créé !");
+            showToast("Panier ouvert ! 🛍️");
         }
     };
 
@@ -209,8 +231,19 @@ function App() {
 
         if (error) alert(error.message);
         else {
-            showToast(`${item.title} ajouté au panier ! 🛍️`);
-            fetchData(); // Force refresh for total
+            showToast(`${item.title} ajouté ! ✅`);
+            fetchData(); // Pour le total
+        }
+    };
+
+    const removeOrderItem = async (orderId: string, orderItemId: string) => {
+        if (confirm("Êtes-vous sûr de vouloir retirer cet article du panier ?")) {
+            const { error } = await supabase.from('order_items').delete().eq('id', orderItemId);
+            if (error) alert(error.message);
+            else {
+                showToast("Article retiré du panier.");
+                fetchData();
+            }
         }
     };
 
@@ -225,13 +258,13 @@ function App() {
                     }).eq('id', item.id);
                 }
             }
-            showToast("Commande payée et stock déduit ! ✅");
+            showToast("Commande payée ! Stock mis à jour. 👑");
         }
         await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
     };
 
     const deleteOrder = async (id: string) => {
-        if (confirm("Supprimer ce panier ?")) {
+        if (confirm("Supprimer définitivement ce panier ?")) {
             await supabase.from('orders').delete().eq('id', id);
             if (activeOrderId === id) setActiveOrderId(null);
         }
@@ -259,7 +292,7 @@ function App() {
             {scannerConfig.active && (
                 <div className="scanner-container">
                     <div className="glass-card" style={{ width: '90%', maxWidth: '500px' }}>
-                        <h2 style={{ marginBottom: '1rem', color: 'white' }}>{scannerConfig.target === 'search' ? 'Scan Recherche' : 'Scan EAN'}</h2>
+                        <h2 style={{ marginBottom: '1rem', color: 'white' }}>Scanner</h2>
                         <div id="reader"></div>
                         <button className="scanner-btn" onClick={() => setScannerConfig({ active: false, target: 'new' })}>Fermer</button>
                     </div>
@@ -278,15 +311,16 @@ function App() {
                 <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => setActiveTab('orders')}><ShoppingCart size={18} /> Commandes</button>
             </nav>
 
+            {/* Bannière de panier actif */}
             {activeOrderId && activeTab === 'inventory' && (
-                <div className="glass-card" style={{ background: 'var(--primary)', color: 'white', padding: '1rem', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '12px', boxShadow: '0 4px 15px rgba(251, 111, 146, 0.4)' }}>
+                <div className="glass-card active-basket-banner">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                        <ShoppingCart size={20} />
-                        <span style={{ fontWeight: 700 }}>Panier de {activeCustomerName} en cours...</span>
+                        <div className="pulse-icon"><ShoppingCart size={20} /></div>
+                        <span style={{ fontWeight: 700 }}>Remplissage du panier de {activeCustomerName}...</span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => setActiveTab('orders')}>Voir Panier</button>
-                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Terminer"><X size={18} /></button>
+                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => setActiveTab('orders')}>Valider Panier</button>
+                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Changer de client"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
                     </div>
                 </div>
             )}
@@ -297,19 +331,19 @@ function App() {
                         <div className="glass-card stat-card">
                             <TrendingUp size={20} color="#fb6f92" />
                             <div className="stat-value">{items.reduce((a, i) => a + (i.sold_quantity * i.sale_price), 0).toFixed(2)} €</div>
-                            <div className="stat-label">Ventes du Jour</div>
+                            <div className="stat-label">Ventes (24h)</div>
                         </div>
                         <div className="glass-card stat-card">
                             <AlertTriangle size={20} color="#d90429" />
                             <div className="stat-value" style={{ color: '#d90429' }}>{items.filter(i => i.quantity <= 1).length}</div>
-                            <div className="stat-label">Alerte Stocks Critiques</div>
+                            <div className="stat-label">Alertes Stock</div>
                         </div>
                     </section>
 
                     <div className="grid">
                         <aside>
                             <div className="glass-card">
-                                <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Nouvel Article</h2>
+                                <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Ajouter Article</h2>
                                 <form onSubmit={handleAddItem}>
                                     <div className="form-group"><label>Intitulé</label><input type="text" value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} required /></div>
                                     <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
@@ -318,12 +352,12 @@ function App() {
                                             {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
                                         </select>
                                     </div>
-                                    <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} /></div>
+                                    <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
                                     <div className="multiplier-grid">
                                         {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
                                     </div>
                                     <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
-                                    <button type="submit">Enregistrer</button>
+                                    <button type="submit">Enregistrer dans le Stock</button>
                                 </form>
                             </div>
                         </aside>
@@ -331,7 +365,7 @@ function App() {
                             <div className="search-container" style={{ display: 'flex', gap: '1rem' }}>
                                 <div style={{ position: 'relative', flex: 1 }}>
                                     <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
-                                    <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem', paddingRight: '2.8rem' }} placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} />
+                                    <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem', paddingRight: '2.8rem' }} placeholder="Rechercher par nom ou EAN..." value={search} onChange={e => setSearch(e.target.value)} />
                                     <Scan style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }} size={18} onClick={() => setScannerConfig({ active: true, target: 'search' })} />
                                 </div>
                                 <select className="glass-card" style={{ width: '150px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
@@ -341,13 +375,13 @@ function App() {
                             </div>
                             <div className="item-list">
                                 {filteredItems.map(item => (
-                                    <div key={item.id} className={`glass-card item-card ${item.quantity <= 1 ? 'stock-alert' : ''}`} style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem' }}>
+                                    <div key={item.id} className={`glass-card item-card ${item.quantity <= 1 ? 'stock-alert' : ''}`}>
                                         <div className="item-info">
                                             <div className="item-title">{item.title}</div>
                                             <div className="item-ean" style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.ean} | {item.category}</div>
-                                            <div className="price-tag" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{item.sale_price.toFixed(2)} €</div>
+                                            <div className="price-tag">{item.sale_price.toFixed(2)} €</div>
                                         </div>
-                                        <div className="item-stats" style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+                                        <div className="item-stats">
                                             <div className="stat-group"><span className="stat-label">Stock</span>
                                                 <div className="qty-controls">
                                                     <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
@@ -356,19 +390,21 @@ function App() {
                                                 </div>
                                             </div>
                                             <button
-                                                className={`tab-btn ${activeOrderId ? 'active' : ''}`}
-                                                style={{ padding: '0.4rem' }}
+                                                className={`add-basket-refined ${activeOrderId ? 'highlight' : ''}`}
                                                 onClick={() => {
                                                     if (activeOrderId) addItemToOrder(activeOrderId, item);
                                                     else {
                                                         const order = orders.find(o => o.status === 'attente');
-                                                        if (order) addItemToOrder(order.id, item);
-                                                        else alert("Veuillez d'abord créer ou sélectionner un panier client.");
+                                                        if (order) {
+                                                            setActiveOrderId(order.id);
+                                                            addItemToOrder(order.id, item);
+                                                        } else alert("Veuillez sélectionner un client d'abord !");
                                                     }
                                                 }}
-                                                title="Ajouter au panier"
+                                                title="Ajouter au Panier"
                                             >
-                                                <ShoppingCart size={16} />
+                                                <ShoppingCart size={18} />
+                                                {activeOrderId && <span className="add-badge">+1</span>}
                                             </button>
                                             <button className="delete-btn" onClick={() => deleteItem(item.id)}><Trash2 size={18} /></button>
                                         </div>
@@ -393,22 +429,18 @@ function App() {
                     </div>
                     <div className="customer-grid">
                         {customers.map(c => {
-                            const lastOrder = orders.find(o => o.customer_id === c.id);
+                            const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
                             return (
                                 <div key={c.id} className="glass-card customer-card">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <div>
                                             <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                                            <p style={{ opacity: 0.7, fontSize: '0.9rem', marginBottom: '0.5rem' }}>FB: {c.facebook_pseudo || '-'}</p>
+                                            <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
                                         </div>
-                                        {lastOrder && (
-                                            <span className={`status-badge status-${lastOrder.status}`} style={{ fontSize: '0.6rem' }}>
-                                                Dernier: {lastOrder.status}
-                                            </span>
-                                        )}
+                                        {activeOrder && <span className="status-badge status-attente">Panier Ouvert</span>}
                                     </div>
                                     <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                        Ajouter des produits <ArrowRight size={16} />
+                                        {activeOrder ? 'Reprendre le Panier' : 'Ouvrir un Panier'} <ArrowRight size={16} />
                                     </button>
                                 </div>
                             );
@@ -421,32 +453,39 @@ function App() {
                 <section className="orders-view">
                     <div className="orders-grid">
                         {orders.map(order => (
-                            <div key={order.id} className="glass-card order-card" style={{ padding: '1.5rem', border: activeOrderId === order.id ? '2px solid var(--primary)' : '1px solid var(--card-border)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                            <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-focus' : ''}`}>
+                                <div className="order-header">
                                     <div>
                                         <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
                                         <span className={`status-badge status-${order.status}`}>{order.status}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button className="qty-btn" onClick={() => { setActiveOrderId(order.id); setActiveTab('inventory'); }} title="Modifier"><Search size={14} /></button>
+                                        <button className="qty-btn" onClick={() => { setActiveOrderId(order.id); setActiveTab('inventory'); }} title="Modifier"><ShoppingCart size={14} /></button>
                                         <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
                                     </div>
                                 </div>
-                                <div className="basket-items" style={{ minHeight: '60px', borderTop: '1px solid var(--card-border)', paddingTop: '1rem' }}>
+                                <div className="basket-items-list">
                                     {order.order_items?.map((oi: any) => (
                                         <div key={oi.id} className="basket-item">
-                                            <span>{oi.items?.title} (x{oi.quantity})</span>
-                                            <span>{oi.unit_price.toFixed(2)} €</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <button className="remove-item-btn" onClick={() => removeOrderItem(order.id, oi.id)} title="Retirer"><MinusCircle size={14} color="#d90429" /></button>
+                                                <span>{oi.items?.title}</span>
+                                            </div>
+                                            <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
                                         </div>
                                     ))}
+                                    {(!order.order_items || order.order_items.length === 0) && <p style={{ opacity: 0.5, fontSize: '0.8rem', textAlign: 'center' }}>Le panier est vide</p>}
                                 </div>
-                                <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
-                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
-                                    <button disabled={order.status === 'attente'} className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Attente</button>
-                                    <button disabled={order.status === 'payé'} className="tab-btn active" onClick={() => updateOrderStatus(order, 'payé')} style={{ background: '#38b000' }}><CheckCircle2 size={16} /> Payé</button>
+                                <div className="order-footer">
+                                    <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
+                                    <div className="order-actions">
+                                        <button disabled={order.status === 'attente'} className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Attente</button>
+                                        <button disabled={order.status === 'payé'} className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
+                        {orders.length === 0 && <div className="empty-state">Aucun historique récent (30j).</div>}
                     </div>
                 </section>
             )}
