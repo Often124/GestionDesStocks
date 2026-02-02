@@ -638,8 +638,16 @@ button:hover {
     cursor: pointer;
     display: flex;
     align-items: center;
+    justify-content: center;
     opacity: 0.6;
     transition: opacity 0.2s;
+    width: 28px;
+    /* Taille fixe V3.9.1 */
+    height: 28px;
+    /* Taille fixe V3.9.1 */
+    min-width: 28px;
+    /* Empêche l'écrasement */
+    flex-shrink: 0;
 }
 
 .remove-item-btn:hover {

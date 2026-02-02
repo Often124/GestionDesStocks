@@ -723,6 +723,7 @@ function App() {
                     </div>
                 </section>
             )}
+            <div className="version-badge">V3.9.1</div>
         </div>
     )
 }
