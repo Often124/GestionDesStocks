@@ -799,3 +799,16 @@ button:hover {
     pointer-events: none;
     z-index: 2000;
 }
+
+.customer-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+    .customer-form {
+        grid-template-columns: 1fr;
+    }
+}

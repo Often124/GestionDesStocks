@@ -609,7 +609,7 @@ function App() {
                 <section className="customers-view">
                     <div className="glass-card" style={{ marginBottom: '2rem' }}>
                         <h2><Plus size={20} /> Nouveau Client</h2>
-                        <form onSubmit={handleAddCustomer} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '1rem', marginTop: '1rem' }}>
+                        <form onSubmit={handleAddCustomer} className="customer-form">
                             <input type="text" placeholder="Prénom" value={newCustomer.first_name} onChange={e => setNewCustomer({ ...newCustomer, first_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
                             <input type="text" placeholder="Nom" value={newCustomer.last_name} onChange={e => setNewCustomer({ ...newCustomer, last_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
                             <input type="text" placeholder="Pseudo Facebook" value={newCustomer.facebook_pseudo} onChange={e => setNewCustomer({ ...newCustomer, facebook_pseudo: e.target.value })} className="glass-card" style={{ padding: '0.8rem' }} />
