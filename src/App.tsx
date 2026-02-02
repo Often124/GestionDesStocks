@@ -17,7 +17,8 @@ import {
     MinusCircle,
     Archive,
     FileText,
-    Download
+    Download,
+    Edit
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import jsPDF from 'jspdf'
@@ -87,12 +88,13 @@ function App() {
         title: '', ean: '', category: 'Général', purchase_price: '', sale_price: '', quantity: '0'
     });
     const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', facebook_pseudo: '' });
+    const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
     const [toast, setToast] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
-    // Subscription globale pour le temps réel (plus besoin de rafraîchir)
+    // Subscription globale pour le temps réel
     useEffect(() => {
         fetchData();
         const channels = [
@@ -104,7 +106,7 @@ function App() {
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, []);
 
-    // Calcul automatique de la TVA (x1.20) quand le prix d'achat change
+    // Calcul automatique de la TVA (x1.20)
     useEffect(() => {
         const purchase = parseFloat(newItem.purchase_price);
         if (!isNaN(purchase) && purchase > 0) {
@@ -214,6 +216,40 @@ function App() {
         }
     };
 
+    const handleUpdateCustomer = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingCustomer) return;
+        const { error } = await supabase.from('customers').update({
+            first_name: editingCustomer.first_name,
+            last_name: editingCustomer.last_name,
+            facebook_pseudo: editingCustomer.facebook_pseudo
+        }).eq('id', editingCustomer.id);
+
+        if (!error) {
+            setEditingCustomer(null);
+            showToast("Informations client mises à jour !");
+            fetchData();
+        } else {
+            alert(error.message);
+        }
+    };
+
+    const deleteCustomer = async (id: string) => {
+        const hasOrders = orders.some(o => o.customer_id === id);
+        if (hasOrders) {
+            alert("Impossible de supprimer un client qui a des commandes. Supprimez ses commandes d'abord.");
+            return;
+        }
+
+        if (confirm("Supprimer ce client ? Cette action est irréversible.")) {
+            const { error } = await supabase.from('customers').delete().eq('id', id);
+            if (!error) {
+                showToast("Client supprimé.");
+                fetchData();
+            }
+        }
+    };
+
     const createOrder = async (customerId: string) => {
         const existingOrder = orders.find(o => o.customer_id === customerId && o.status === 'attente');
         if (existingOrder) {
@@ -249,11 +285,10 @@ function App() {
     };
 
     const removeOrderItem = async (orderId: string, orderItemId: string) => {
-        if (confirm("Êtes-vous sûr de vouloir retirer cet article du panier ?")) {
+        if (confirm("Retirer cet article du panier ?")) {
             const { error } = await supabase.from('order_items').delete().eq('id', orderItemId);
-            if (error) alert(error.message);
-            else {
-                showToast("Article retiré du panier.");
+            if (!error) {
+                showToast("Article retiré.");
                 fetchData();
             }
         }
@@ -286,31 +321,57 @@ function App() {
         }
     };
 
-    const generateInvoice = (order: Order) => {
+    const generateInvoice = async (order: Order) => {
         const doc = new jsPDF();
         const customerName = `${order.customers?.first_name} ${order.customers?.last_name}`;
+        const isPaid = order.status === 'payé';
 
-        // Header
-        doc.setFontSize(22);
-        doc.setTextColor(251, 111, 146); // Pink Lovely
-        doc.text("LOVELY SHOPPING", 105, 20, { align: 'center' });
+        // Header - Image Logo
+        try {
+            const logoUrl = '/logo.jpg';
+            const img = new Image();
+            img.src = logoUrl;
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+            });
+            doc.addImage(img, 'JPEG', 20, 10, 30, 30);
+        } catch (e) {
+            console.error("Logo non trouvé", e);
+        }
+
+        // Title & Brand
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(24);
+        doc.setTextColor(251, 111, 146);
+        doc.text("LOVELY SHOPPING", 55, 25);
 
         doc.setFontSize(10);
         doc.setTextColor(100);
-        doc.text("Facture Provisoire", 105, 27, { align: 'center' });
+        doc.setFont("helvetica", "normal");
+        doc.text(isPaid ? "FACTURE" : "FACTURE PROVISOIRE", 55, 32);
 
-        // Line separator
         doc.setDrawColor(251, 111, 146);
-        doc.line(20, 35, 190, 35);
+        doc.line(20, 45, 190, 45);
 
         // Details
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setTextColor(0);
-        doc.text(`Client: ${customerName}`, 20, 45);
-        doc.text(`Date: ${new Date(order.created_at).toLocaleDateString()}`, 20, 52);
-        doc.text(`N° Commande: ${order.id.split('-')[0].toUpperCase()}`, 20, 59);
+        doc.setFont("helvetica", "bold");
+        doc.text("DESTINATAIRE:", 20, 55);
+        doc.setFont("helvetica", "normal");
+        doc.text(customerName.toUpperCase(), 20, 62);
+        if (order.customers?.facebook_pseudo) {
+            doc.text(`FB: @${order.customers.facebook_pseudo}`, 20, 67);
+        }
 
-        // Items
+        doc.setFont("helvetica", "bold");
+        doc.text("DÉTAILS COMMANDE:", 130, 55);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Date: ${new Date(order.created_at).toLocaleDateString()}`, 130, 62);
+        doc.text(`Référence: #${order.id.split('-')[0].toUpperCase()}`, 130, 67);
+
+        // Table
         const tableData = (order.order_items || []).map(oi => [
             oi.items?.title || "Article inconnu",
             oi.quantity,
@@ -319,26 +380,34 @@ function App() {
         ]);
 
         autoTable(doc, {
-            startY: 70,
-            head: [['Article', 'Qté', 'Prix Unitaire', 'Total']],
+            startY: 80,
+            head: [['Désignation', 'Qté', 'Prix Unitaire', 'Total']],
             body: tableData,
-            headStyles: { fillColor: [251, 111, 146] },
+            headStyles: { fillColor: [251, 111, 146], fontStyle: 'bold' },
             margin: { horizontal: 20 },
-            theme: 'grid'
+            theme: 'striped',
+            styles: { font: 'helvetica', fontSize: 10 }
         });
 
-        // Footer Total
-        const finalY = (doc as any).lastAutoTable.finalY + 10;
+        const finalY = (doc as any).lastAutoTable.finalY + 15;
         doc.setFontSize(14);
         doc.setFont("helvetica", "bold");
-        doc.text(`TOTAL À PAYER: ${order.total_price.toFixed(2)} €`, 190, finalY, { align: 'right' });
+        doc.setTextColor(251, 111, 146);
+        doc.text(`TOTAL: ${order.total_price.toFixed(2)} €`, 190, finalY, { align: 'right' });
 
-        // Legal mention
-        doc.setFontSize(8);
+        if (isPaid) {
+            doc.setFontSize(12);
+            doc.setTextColor(56, 176, 0);
+            doc.text("RÈGLEMENT EFFECTUÉ", 190, finalY + 10, { align: 'right' });
+        }
+
+        // Footer
+        doc.setFontSize(9);
         doc.setFont("helvetica", "italic");
-        doc.text("Merci pour votre confiance ! Lovely Shopping vous souhaite une agréable journée.", 105, 280, { align: 'center' });
+        doc.setTextColor(150);
+        doc.text("Merci pour votre confiance ! Lovely Shopping vous souhaite une agréable journée.", 105, 285, { align: 'center' });
 
-        doc.save(`Facture_${customerName.replace(' ', '_')}.pdf`);
+        doc.save(`${isPaid ? 'Facture' : 'Facture_Provisoire'}_${customerName.replace(' ', '_')}.pdf`);
     };
 
     const filteredItems = items.filter(item =>
@@ -369,6 +438,27 @@ function App() {
                 </div>
             )}
 
+            {/* Modal Edition Client */}
+            {editingCustomer && (
+                <div className="scanner-container" style={{ zIndex: 1100 }}>
+                    <div className="glass-card" style={{ width: '90%', maxWidth: '400px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0 }}>Modifier Client</h2>
+                            <button className="delete-btn" onClick={() => setEditingCustomer(null)}><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handleUpdateCustomer}>
+                            <div className="form-group"><label>Prénom</label><input type="text" value={editingCustomer.first_name} onChange={e => setEditingCustomer({ ...editingCustomer, first_name: e.target.value })} required /></div>
+                            <div className="form-group"><label>Nom</label><input type="text" value={editingCustomer.last_name} onChange={e => setEditingCustomer({ ...editingCustomer, last_name: e.target.value })} required /></div>
+                            <div className="form-group"><label>Pseudo Facebook</label><input type="text" value={editingCustomer.facebook_pseudo} onChange={e => setEditingCustomer({ ...editingCustomer, facebook_pseudo: e.target.value })} /></div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                                <button type="button" className="tab-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.1)' }} onClick={() => setEditingCustomer(null)}>Annuler</button>
+                                <button type="submit" style={{ flex: 1 }}>Enregistrer</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             <header>
                 <div className="logo-container"><img src="/logo.jpg" alt="Logo" className="site-logo" /></div>
                 <h1>Lovely Shopping</h1>
@@ -378,7 +468,7 @@ function App() {
             <nav className="view-tabs">
                 <button className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}><Package size={18} /> Stocks</button>
                 <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
-                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Commandes en cours</button>
+                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Panier</button>
                 <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => { setActiveTab('archives'); setActiveOrderId(null); }}><Archive size={18} /> Archives</button>
             </nav>
 
@@ -508,11 +598,23 @@ function App() {
                                             <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
                                             <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
                                         </div>
-                                        {activeOrder && <span className="status-badge status-attente">Panier Ouvert</span>}
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
+                                            <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
+                                        </div>
                                     </div>
-                                    <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                        {activeOrder ? 'Reprendre le Panier' : 'Ouvrir un Panier'} <ArrowRight size={16} />
-                                    </button>
+                                    {activeOrder ? (
+                                        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                            <span className="status-badge status-attente" style={{ flex: 1, textAlign: 'center' }}>Panier Ouvert</span>
+                                            <button className="tab-btn active" style={{ flex: 2, justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                                Reprendre <ArrowRight size={16} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                            Ouvrir un Panier <ArrowRight size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             );
                         })}
@@ -531,7 +633,7 @@ function App() {
                                         <span className={`status-badge status-${order.status}`}>{order.status}</span>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button className="qty-btn" onClick={() => generateInvoice(order)} title="Générer Facture PDF"><FileText size={16} /></button>
+                                        <button className="qty-btn" onClick={() => generateInvoice(order)} title="Générer Facture Provisoire"><FileText size={16} /></button>
                                         <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
                                     </div>
                                 </div>
@@ -570,7 +672,7 @@ function App() {
                                         <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
                                         <span className="status-badge status-payé">Payé</span>
                                     </div>
-                                    <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture PDF"><Download size={16} /></button>
+                                    <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture Finale"><Download size={16} /></button>
                                 </div>
                                 <div className="basket-items-list">
                                     {order.order_items?.map((oi: any) => (
