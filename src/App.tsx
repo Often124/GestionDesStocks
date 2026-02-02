@@ -98,6 +98,9 @@ function App() {
     return (
         <div className="container">
             <header>
+                <div className="logo-container">
+                    <img src="/logo.jpg" alt="Lovely Shopping Logo" className="site-logo" />
+                </div>
                 <h1>Lovely Shopping</h1>
                 <p className="subtitle">Système de Gestion des Stocks (Supabase Cloud)</p>
             </header>
