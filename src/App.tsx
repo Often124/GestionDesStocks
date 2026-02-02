@@ -6,12 +6,13 @@ interface Item {
     title: string;
     ean: string;
     quantity: number;
+    sold_quantity: number;
 }
 
 function App() {
     const [items, setItems] = useState<Item[]>([]);
     const [search, setSearch] = useState('');
-    const [newItem, setNewItem] = useState({ title: '', ean: '', quantity: '' });
+    const [newItem, setNewItem] = useState({ title: '', ean: '', quantity: '', sold_quantity: '0' });
     const [loading, setLoading] = useState(true);
 
     // Charger les articles au démarrage
@@ -69,17 +70,35 @@ function App() {
                     title: newItem.title,
                     ean: newItem.ean,
                     quantity: parseInt(newItem.quantity),
+                    sold_quantity: parseInt(newItem.sold_quantity) || 0,
                 },
             ]);
 
         if (error) {
             alert("Erreur lors de l'ajout de l'article : " + error.message);
         } else {
-            setNewItem({ title: '', ean: '', quantity: '' });
+            setNewItem({ title: '', ean: '', quantity: '', sold_quantity: '0' });
+        }
+    };
+
+    const updateQuantity = async (id: string, field: 'quantity' | 'sold_quantity', delta: number) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+
+        const newValue = Math.max(0, (item[field] || 0) + delta);
+
+        const { error } = await supabase
+            .from('items')
+            .update({ [field]: newValue })
+            .eq('id', id);
+
+        if (error) {
+            alert("Erreur lors de la mise à jour : " + error.message);
         }
     };
 
     const deleteItem = async (id: string) => {
+        if (!confirm("Voulez-vous vraiment supprimer cet article ?")) return;
         const { error } = await supabase
             .from('items')
             .delete()
@@ -131,7 +150,7 @@ function App() {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Quantité</label>
+                                <label>Quantité en Stock</label>
                                 <input
                                     type="number"
                                     value={newItem.quantity}
@@ -140,8 +159,18 @@ function App() {
                                     disabled={loading}
                                 />
                             </div>
+                            <div className="form-group">
+                                <label>Quantité Vendue (Initial)</label>
+                                <input
+                                    type="number"
+                                    value={newItem.sold_quantity}
+                                    onChange={e => setNewItem({ ...newItem, sold_quantity: e.target.value })}
+                                    placeholder="0"
+                                    disabled={loading}
+                                />
+                            </div>
                             <button type="submit" disabled={loading}>
-                                {loading ? 'Connexion en cours...' : 'Enregistrer l\'article'}
+                                {loading ? 'Connexion...' : 'Enregistrer l\'article'}
                             </button>
                         </form>
                     </div>
@@ -160,9 +189,9 @@ function App() {
                     </div>
 
                     <div className="glass-card">
-                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>
-                            Inventaire ({filteredItems.length})
-                            {loading && <span style={{ fontSize: '0.8rem', marginLeft: '1rem', color: 'var(--text-dim)' }}>Chargement...</span>}
+                        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.2rem', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Inventaire ({filteredItems.length})</span>
+                            {loading && <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Chargement...</span>}
                         </h2>
                         <div className="item-list">
                             {filteredItems.length > 0 ? (
@@ -172,10 +201,28 @@ function App() {
                                             <div className="item-title">{item.title}</div>
                                             <div className="item-ean">EAN: {item.ean}</div>
                                         </div>
-                                        <div className="item-qty">
-                                            <span className="qty-badge">{item.quantity} en stock</span>
-                                            <button className="delete-btn" onClick={() => deleteItem(item.id)}>
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+
+                                        <div className="item-stats">
+                                            <div className="stat-group">
+                                                <span className="stat-label">Stock</span>
+                                                <div className="qty-controls">
+                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
+                                                    <span className="qty-badge">{item.quantity}</span>
+                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
+                                                </div>
+                                            </div>
+
+                                            <div className="stat-group">
+                                                <span className="stat-label">Vendu</span>
+                                                <div className="qty-controls">
+                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', -1)}>-</button>
+                                                    <span className="qty-badge sold">{item.sold_quantity || 0}</span>
+                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'sold_quantity', 1)}>+</button>
+                                                </div>
+                                            </div>
+
+                                            <button className="delete-btn" onClick={() => deleteItem(item.id)} title="Supprimer">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                     <polyline points="3 6 5 6 21 6"></polyline>
                                                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                                 </svg>
@@ -185,8 +232,8 @@ function App() {
                                 ))
                             ) : (
                                 <div className="empty-state">
-                                    {!loading && (search ? "Aucun article ne correspond à votre recherche." : "Votre inventaire est vide.")}
-                                    {loading && "Connexion à Supabase..."}
+                                    {!loading && (search ? "Aucun article trouvé." : "L'inventaire est vide.")}
+                                    {loading && "Chargement des stocks..."}
                                 </div>
                             )}
                         </div>
