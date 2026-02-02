@@ -649,8 +649,27 @@ button:hover {
 .basket-item {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    /* Changé de center pour mieux gérer les textes longs */
     padding: 0.8rem 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 1rem;
+}
+
+.basket-item>div:first-child {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    /* Alignement en haut pour le bouton moins */
+    gap: 0.8rem;
+    min-width: 0;
+    /* Important pour le text-overflow/wrap */
+}
+
+.basket-item span {
+    word-break: break-word;
+    /* Force le wrap si nécessaire */
+    text-align: left;
 }
 
 .order-header {

@@ -331,7 +331,12 @@ function App() {
             showToast("Commande payée ! Stock mis à jour. 👑");
         }
         const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
-        if (!error) fetchData();
+        if (!error) {
+            if (newStatus === 'payé' && activeOrderId === order.id) {
+                setActiveOrderId(null);
+            }
+            fetchData();
+        }
     };
 
     const deleteOrder = async (id: string) => {
@@ -663,7 +668,7 @@ function App() {
                                 <div className="basket-items-list">
                                     {order.order_items?.map((oi: any) => (
                                         <div key={oi.id} className="basket-item">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <div>
                                                 <button className="remove-item-btn" onClick={() => removeOrderItem(order.id, oi.id)} title="Retirer"><MinusCircle size={14} color="#d90429" /></button>
                                                 <span>{oi.items?.title}</span>
                                             </div>
