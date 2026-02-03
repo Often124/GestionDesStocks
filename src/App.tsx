@@ -96,6 +96,7 @@ function App() {
     const [newCustomer, setNewCustomer] = useState({ first_name: '', last_name: '', facebook_pseudo: '' });
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
     const [viewingHistory, setViewingHistory] = useState<Customer | null>(null);
+    const [archiveSearch, setArchiveSearch] = useState('');
 
     const [loading, setLoading] = useState(true);
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
@@ -142,15 +143,11 @@ function App() {
 
     const fetchData = async () => {
         setLoading(true);
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 31);
-
         const [itemsRes, customersRes, ordersRes] = await Promise.all([
             supabase.from('items').select('*').order('created_at', { ascending: false }),
             supabase.from('customers').select('*').order('last_name', { ascending: true }),
             supabase.from('orders')
                 .select('*, customers(*), order_items(*, items(*))')
-                .gt('created_at', thirtyDaysAgo.toISOString())
                 .order('created_at', { ascending: false })
         ]);
 
@@ -722,12 +719,34 @@ function App() {
 
             {activeTab === 'archives' && (
                 <section className="orders-view">
+                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                            <input
+                                type="text"
+                                className="glass-card"
+                                style={{ paddingLeft: '2.8rem' }}
+                                placeholder="Rechercher par Référence ou Nom..."
+                                value={archiveSearch}
+                                onChange={e => setArchiveSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div className="orders-grid">
-                        {orders.filter(o => o.status === 'payé').map(order => (
+                        {orders.filter(o => {
+                            if (o.status !== 'payé') return false;
+                            const searchLower = archiveSearch.toLowerCase();
+                            const matchesRef = o.reference?.toLowerCase().includes(searchLower);
+                            const matchesName = `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
+                            return matchesRef || matchesName;
+                        }).map(order => (
                             <div key={order.id} className="glass-card order-card archived-card">
                                 <div className="order-header">
                                     <div>
-                                        <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
+                                        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
+                                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700 }}>{order.reference}</span>
+                                        </div>
                                         <span className="status-badge status-payé">Payé</span>
                                     </div>
                                     <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture Finale"><Download size={16} /></button>
@@ -749,7 +768,9 @@ function App() {
                                 </div>
                             </div>
                         ))}
-                        {orders.filter(o => o.status === 'payé').length === 0 && <div className="empty-state">Aucune archive pour le moment.</div>}
+                        {orders.filter(o => o.status === 'payé' && (archiveSearch === '' || (o.reference?.toLowerCase().includes(archiveSearch.toLowerCase()) || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(archiveSearch.toLowerCase())))).length === 0 && (
+                            <div className="empty-state">{archiveSearch ? 'Aucun résultat trouvé.' : 'Aucune archive pour le moment.'}</div>
+                        )}
                     </div>
                 </section>
             )}
