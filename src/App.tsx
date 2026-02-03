@@ -64,6 +64,7 @@ interface OrderItem {
     item_id: string;
     quantity: number;
     unit_price: number;
+    purchase_unit_price: number;
     items?: Item;
 }
 
@@ -97,6 +98,8 @@ function App() {
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
     const [viewingHistory, setViewingHistory] = useState<Customer | null>(null);
     const [archiveSearch, setArchiveSearch] = useState('');
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [orderSearch, setOrderSearch] = useState('');
 
     const [loading, setLoading] = useState(true);
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
@@ -314,7 +317,8 @@ function App() {
                 order_id: orderId,
                 item_id: item.id,
                 quantity: 1,
-                unit_price: item.sale_price
+                unit_price: item.sale_price,
+                purchase_unit_price: item.purchase_price
             }]);
 
             if (error) alert(error.message);
@@ -642,8 +646,25 @@ function App() {
                             <button type="submit" style={{ padding: '0.8rem 2rem' }}>Enregistrer</button>
                         </form>
                     </div>
+                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                            <input
+                                type="text"
+                                className="glass-card"
+                                style={{ paddingLeft: '2.8rem' }}
+                                placeholder="Rechercher une cliente par nom ou prénom..."
+                                value={customerSearch}
+                                onChange={e => setCustomerSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div className="customer-grid">
-                        {customers.map(c => {
+                        {customers.filter(c => {
+                            const searchLower = customerSearch.toLowerCase();
+                            return (c.first_name + ' ' + c.last_name).toLowerCase().includes(searchLower) ||
+                                (c.facebook_pseudo || '').toLowerCase().includes(searchLower);
+                        }).map(c => {
                             const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
                             return (
                                 <div key={c.id} className="glass-card customer-card">
@@ -679,8 +700,25 @@ function App() {
 
             {activeTab === 'orders' && (
                 <section className="orders-view">
+                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                            <input
+                                type="text"
+                                className="glass-card"
+                                style={{ paddingLeft: '2.8rem' }}
+                                placeholder="Rechercher un panier par nom de cliente..."
+                                value={orderSearch}
+                                onChange={e => setOrderSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <div className="orders-grid">
-                        {orders.filter(o => o.status === 'attente').map(order => (
+                        {orders.filter(o => {
+                            if (o.status !== 'attente') return false;
+                            const searchLower = orderSearch.toLowerCase();
+                            return `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
+                        }).map(order => (
                             <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-focus' : ''}`}>
                                 <div className="order-header">
                                     <div>
@@ -712,7 +750,9 @@ function App() {
                                 </div>
                             </div>
                         ))}
-                        {orders.filter(o => o.status === 'attente').length === 0 && <div className="empty-state">Aucune commande en cours.</div>}
+                        {orders.filter(o => o.status === 'attente' && (orderSearch === '' || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(orderSearch.toLowerCase()))).length === 0 && (
+                            <div className="empty-state">{orderSearch ? 'Aucun panier trouvé.' : 'Aucun panier en cours.'}</div>
+                        )}
                     </div>
                 </section>
             )}
@@ -760,7 +800,12 @@ function App() {
                                     ))}
                                 </div>
                                 <div className="order-footer">
-                                    <div className="total-tag">Payé: {order.total_price.toFixed(2)} €</div>
+                                    <div>
+                                        <div className="total-tag">Payé: {order.total_price.toFixed(2)} €</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#38b000', fontWeight: 600, marginTop: '0.2rem' }}>
+                                            Bénéfice: +{order.order_items?.reduce((acc, oi) => acc + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0).toFixed(2)} €
+                                        </div>
+                                    </div>
                                     <div className="order-actions">
                                         <button className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Remettre en cours</button>
                                         <button className="delete-btn" onClick={() => deleteOrder(order.id)} title="Supprimer Archive"><Trash2 size={16} /></button>
@@ -776,6 +821,30 @@ function App() {
             )}
             {activeTab === 'stats' && (
                 <section className="stats-view">
+                    <div className="stats-dashboard" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '2rem' }}>
+                        <div className="glass-card stat-card">
+                            <TrendingUp size={20} color="#fb6f92" />
+                            <div className="stat-value">
+                                {orders.filter(o => o.status === 'payé').reduce((acc, o) => acc + o.total_price, 0).toFixed(2)} €
+                            </div>
+                            <div className="stat-label">Chiffre d'Affaires Global</div>
+                        </div>
+                        <div className="glass-card stat-card" style={{ borderLeft: '4px solid #38b000' }}>
+                            <Star size={20} color="#38b000" />
+                            <div className="stat-value" style={{ color: '#38b000' }}>
+                                {orders.filter(o => o.status === 'payé').reduce((acc, o) => {
+                                    const profit = (o.order_items || []).reduce((p, oi) => p + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0);
+                                    return acc + profit;
+                                }, 0).toFixed(2)} €
+                            </div>
+                            <div className="stat-label">Bénéfice Net Réel ✨</div>
+                        </div>
+                        <div className="glass-card stat-card">
+                            <Users size={20} color="#fb6f92" />
+                            <div className="stat-value">{customers.length}</div>
+                            <div className="stat-label">Clientes Fidèles</div>
+                        </div>
+                    </div>
                     <div className="grid">
                         <div className="glass-card">
                             <h2><Star size={20} color="#FFD700" /> Top 5 Produits</h2>
