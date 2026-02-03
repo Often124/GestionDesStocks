@@ -126,6 +126,48 @@ function App() {
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, []);
 
+    // Initialisation du scanner avec autofocus amélioré
+    useEffect(() => {
+        if (scannerConfig.active) {
+            const html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader",
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 150 },
+                    aspectRatio: 1.777778,
+                    videoConstraints: {
+                        facingMode: "environment",
+                        advanced: [
+                            { focusMode: "continuous" } as any,
+                            { zoom: 1.0 } as any
+                        ]
+                    }
+                },
+                false
+            );
+
+            html5QrcodeScanner.render(
+                (decodedText) => {
+                    if (scannerConfig.target === 'new') {
+                        setNewItem(prev => ({ ...prev, ean: decodedText }));
+                    } else {
+                        setSearch(decodedText);
+                    }
+                    html5QrcodeScanner.clear();
+                    setScannerConfig({ active: false, target: 'new' });
+                    showToast(`Code scanné: ${decodedText} ✅`);
+                },
+                (errorMessage) => {
+                    // Ignorer les erreurs de scan en continu
+                }
+            );
+
+            return () => {
+                html5QrcodeScanner.clear().catch(() => { });
+            };
+        }
+    }, [scannerConfig.active]);
+
     // Calcul automatique de la TVA (x1.20)
     useEffect(() => {
         const purchase = parseFloat(newItem.purchase_price);
