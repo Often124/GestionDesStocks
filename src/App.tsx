@@ -57,6 +57,7 @@ interface Order {
     customers?: Customer;
     order_items?: OrderItem[];
     reference?: string;
+    payment_method?: 'wero' | 'especes';
 }
 
 interface OrderItem {
@@ -111,6 +112,7 @@ function App() {
     const [showAdminAuth, setShowAdminAuth] = useState(false);
     const [adminPasscode, setAdminPasscode] = useState('');
     const [editingItem, setEditingItem] = useState<Item | null>(null);
+    const [selectingPaymentOrder, setSelectingPaymentOrder] = useState<Order | null>(null);
 
     const generateOrderRef = () => {
         return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -438,7 +440,7 @@ function App() {
         }
     };
 
-    const updateOrderStatus = async (order: Order, newStatus: 'attente' | 'payé') => {
+    const updateOrderStatus = async (order: Order, newStatus: 'attente' | 'payé', paymentMethod?: 'wero' | 'especes') => {
         if (newStatus === 'payé' && order.status !== 'payé') {
             for (const orderItem of (order.order_items || [])) {
                 const item = items.find(i => i.id === orderItem.item_id);
@@ -451,11 +453,16 @@ function App() {
             }
             showToast("Commande payée ! Stock mis à jour. 👑");
         }
-        const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
+
+        const updates: any = { status: newStatus };
+        if (paymentMethod) updates.payment_method = paymentMethod;
+
+        const { error } = await supabase.from('orders').update(updates).eq('id', order.id);
         if (!error) {
             if (newStatus === 'payé' && activeOrderId === order.id) {
                 setActiveOrderId(null);
             }
+            setSelectingPaymentOrder(null);
             fetchData();
         }
     };
@@ -547,7 +554,8 @@ function App() {
         if (isPaid) {
             doc.setFontSize(12);
             doc.setTextColor(56, 176, 0);
-            doc.text("RÈGLEMENT EFFECTUÉ", 190, finalY + 10, { align: 'right' });
+            const methodLabel = order.payment_method === 'wero' ? 'WERO / VIREMENT' : 'ESPÈCES';
+            doc.text(`PAYÉ PAR ${methodLabel}`, 190, finalY + 10, { align: 'right' });
         }
 
         // Footer
@@ -736,6 +744,41 @@ function App() {
                                 <button type="submit" style={{ flex: 1 }}>Mettre à Jour</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Sélection Mode de Règlement V6.0 */}
+            {selectingPaymentOrder && (
+                <div className="scanner-container" style={{ zIndex: 1300 }}>
+                    <div className="glass-card" style={{ width: '90%', maxWidth: '400px', textAlign: 'center' }}>
+                        <ShoppingCart size={40} color="var(--primary)" style={{ marginBottom: '1rem' }} />
+                        <h2 style={{ marginBottom: '0.5rem' }}>Mode de Règlement</h2>
+                        <p style={{ opacity: 0.7, marginBottom: '2rem' }}>Sélectionnez le mode de paiement pour la commande de {selectingPaymentOrder.customers?.first_name}</p>
+
+                        <div style={{ display: 'grid', gap: '1rem' }}>
+                            <button
+                                className="tab-btn active"
+                                style={{ padding: '1.2rem', justifyContent: 'center', fontSize: '1.1rem' }}
+                                onClick={() => updateOrderStatus(selectingPaymentOrder, 'payé', 'wero')}
+                            >
+                                💳 Wero / Virement
+                            </button>
+                            <button
+                                className="tab-btn active"
+                                style={{ padding: '1.2rem', justifyContent: 'center', fontSize: '1.1rem', background: '#38b000' }}
+                                onClick={() => updateOrderStatus(selectingPaymentOrder, 'payé', 'especes')}
+                            >
+                                💵 Espèces
+                            </button>
+                            <button
+                                className="tab-btn"
+                                style={{ marginTop: '1rem', background: 'rgba(255,255,255,0.1)' }}
+                                onClick={() => setSelectingPaymentOrder(null)}
+                            >
+                                Annuler
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1015,7 +1058,7 @@ function App() {
                                     <div className="order-footer">
                                         <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
                                         <div className="order-actions">
-                                            <button className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
+                                            <button className="tab-btn active pay-btn" onClick={() => setSelectingPaymentOrder(order)}><CheckCircle2 size={16} /> Marquer Payé</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1058,8 +1101,13 @@ function App() {
                                             <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
                                                 <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
                                                 <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700 }}>{order.reference}</span>
+                                                {order.payment_method === 'wero' ? (
+                                                    <span title="Wero / Virement" style={{ cursor: 'help' }}>💳</span>
+                                                ) : (
+                                                    <span title="Espèces" style={{ cursor: 'help' }}>💵</span>
+                                                )}
                                             </div>
-                                            <span className="status-badge status-payé">Payé</span>
+                                            <span className="status-badge status-payé">Payé {order.payment_method === 'wero' ? '(Wero)' : '(Espèces)'}</span>
                                         </div>
                                         <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture Finale"><Download size={16} /></button>
                                     </div>
@@ -1166,7 +1214,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V5.1.0 Master Admin Mode</div>
+            <div className="version-badge">V6.0.0 Payment Methods</div>
         </div>
     )
 }
