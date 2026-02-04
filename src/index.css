@@ -1,4 +1,5 @@
 :root {
+    --input-bg: rgba(255, 255, 255, 0.5);
     --primary: #fb6f92;
     --primary-hover: #ff85a2;
     --bg: #fff5f8;
@@ -132,7 +133,7 @@ label {
 input {
     width: 100%;
     padding: 0.8rem 1rem;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--input-bg);
     border: 1px solid var(--card-border);
     border-radius: 12px;
     color: var(--text);
@@ -860,3 +861,7 @@ button:hover {
 .grid.focus-mode main {
     max-width: 100%;
 }
+
+
+
+

@@ -22,7 +22,8 @@ import {
     Moon,
     Sun,
     Star,
-    BarChart3
+    BarChart3,
+    Lock
 } from 'lucide-react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import jsPDF from 'jspdf'
@@ -105,6 +106,12 @@ function App() {
     const [scannerConfig, setScannerConfig] = useState<{ active: boolean, target: 'new' | 'search' }>({ active: false, target: 'new' });
     const [toast, setToast] = useState<{ message: string, visible: boolean }>({ message: '', visible: false });
 
+    // Master Admin States V5.0
+    const [isAdminMode, setIsAdminMode] = useState(false);
+    const [showAdminAuth, setShowAdminAuth] = useState(false);
+    const [adminPasscode, setAdminPasscode] = useState('');
+    const [editingItem, setEditingItem] = useState<Item | null>(null);
+
     const generateOrderRef = () => {
         return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     };
@@ -180,6 +187,40 @@ function App() {
             setNewItem(prev => ({ ...prev, sale_price: '' }));
         }
     }, [newItem.purchase_price]);
+
+    const handleAdminLogin = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (adminPasscode === '8888') {
+            setIsAdminMode(true);
+            setShowAdminAuth(false);
+            setAdminPasscode('');
+            showToast("Mode Admin Activé 👑");
+        } else {
+            showToast("Code Incorrect ❌");
+            setAdminPasscode('');
+        }
+    };
+
+    const handleUpdateItemFull = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingItem) return;
+        const { error } = await supabase.from('items').update({
+            title: editingItem.title,
+            ean: editingItem.ean,
+            quantity: editingItem.quantity,
+            purchase_price: editingItem.purchase_price,
+            sale_price: editingItem.sale_price,
+            category: editingItem.category
+        }).eq('id', editingItem.id);
+
+        if (!error) {
+            setEditingItem(null);
+            showToast("Article mis à jour ! ✅");
+            fetchData();
+        } else {
+            alert(error.message);
+        }
+    };
 
     const showToast = (message: string) => {
         setToast({ message, visible: true });
@@ -516,6 +557,7 @@ function App() {
             <button className="theme-toggle" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
                 {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
             </button>
+
             {toast.visible && (
                 <div className="glass-card" style={{ position: 'fixed', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'var(--primary)', color: 'white', padding: '0.8rem 1.5rem', borderRadius: '12px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.8rem', animation: 'fadeInDown 0.3s ease-out' }}>
                     <CheckCircle2 size={18} />
@@ -554,385 +596,7 @@ function App() {
                 </div>
             )}
 
-            <header>
-                <div className="logo-container"><img src="/logo.jpg" alt="Logo" className="site-logo" /></div>
-                <h1>Lovely Shopping</h1>
-                <p className="subtitle">Luxe & Élégance au Quotidien</p>
-            </header>
-
-            <nav className="view-tabs">
-                <button className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}><Package size={18} /> Stocks</button>
-                <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
-                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Panier</button>
-                <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => { setActiveTab('archives'); setActiveOrderId(null); }}><Archive size={18} /> Archives</button>
-                <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => { setActiveTab('stats'); setActiveOrderId(null); }}><BarChart3 size={18} /> Stats</button>
-            </nav>
-
-            {activeOrderId && activeTab === 'inventory' && (
-                <div className="glass-card active-basket-banner">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                        <div className="pulse-icon"><ShoppingCart size={20} /></div>
-                        <span style={{ fontWeight: 700 }}>Remplissage du panier de {activeCustomerName}...</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}>Valider Panier</button>
-                        <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Changer de client"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'inventory' && (
-                <>
-                    {!activeOrderId && (
-                        <section className="stats-dashboard">
-                            <div className="glass-card stat-card">
-                                <TrendingUp size={20} color="#fb6f92" />
-                                <div className="stat-value">{items.reduce((a, i) => a + (i.sold_quantity * i.sale_price), 0).toFixed(2)} €</div>
-                                <div className="stat-label">Ventes (24h)</div>
-                            </div>
-                            <div className="glass-card stat-card">
-                                <AlertTriangle size={20} color="#d90429" />
-                                <div className="stat-value" style={{ color: '#d90429' }}>{items.filter(i => i.quantity <= 1).length}</div>
-                                <div className="stat-label">Alertes Stock</div>
-                            </div>
-                        </section>
-                    )}
-
-                    <div className={`grid ${activeOrderId ? 'focus-mode' : ''}`}>
-                        {!activeOrderId && (
-                            <aside>
-                                <div className="glass-card">
-                                    <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Ajouter Article</h2>
-                                    <form onSubmit={handleAddItem}>
-                                        <div className="form-group"><label>Intitulé</label><input type="text" value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} required /></div>
-                                        <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
-                                        <div className="form-group"><label>Catégorie</label>
-                                            <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
-                                                {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
-                                        <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
-                                        <div className="multiplier-grid">
-                                            {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
-                                        </div>
-                                        <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
-                                        <button type="submit">Enregistrer dans le Stock</button>
-                                    </form>
-                                </div>
-                            </aside>
-                        )}
-                        <main>
-                            <div className="search-container" style={{ display: 'flex', gap: '1rem' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
-                                    <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
-                                    <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem', paddingRight: '2.8rem' }} placeholder="Rechercher par nom ou EAN..." value={search} onChange={e => setSearch(e.target.value)} />
-                                    <Scan style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }} size={18} onClick={() => setScannerConfig({ active: true, target: 'search' })} />
-                                </div>
-                                <select className="glass-card" style={{ width: '150px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
-                                    <option value="Tous">📦 Tous</option>
-                                    {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
-                                </select>
-                            </div>
-                            <div className="item-list">
-                                {filteredItems.map(item => (
-                                    <div key={item.id} className={`glass-card item-card ${item.quantity <= 1 ? 'stock-alert' : ''}`}>
-                                        <div className="item-info">
-                                            <div className="item-title">{item.title}</div>
-                                            <div className="item-ean" style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.ean} | {item.category}</div>
-                                            <div className="price-tag">{item.sale_price.toFixed(2)} €</div>
-                                        </div>
-                                        <div className="item-stats">
-                                            <div className="stat-group"><span className="stat-label">Stock</span>
-                                                <div className="qty-controls">
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
-                                                    <span className="qty-badge">{item.quantity}</span>
-                                                    <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
-                                                </div>
-                                            </div>
-                                            <button
-                                                className={`add-basket-refined ${activeOrderId ? 'highlight' : ''}`}
-                                                onClick={() => {
-                                                    if (activeOrderId) addItemToOrder(activeOrderId, item);
-                                                    else {
-                                                        const order = orders.find(o => o.status === 'attente');
-                                                        if (order) {
-                                                            setActiveOrderId(order.id);
-                                                            addItemToOrder(order.id, item);
-                                                        } else alert("Veuillez sélectionner un client d'abord !");
-                                                    }
-                                                }}
-                                                title="Ajouter au Panier"
-                                            >
-                                                <ShoppingCart size={18} />
-                                                {activeOrderId && <span className="add-badge">+1</span>}
-                                            </button>
-                                            <button className="delete-btn" onClick={() => deleteItem(item.id)}><Trash2 size={18} /></button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </main>
-                    </div>
-                </>
-            )}
-
-            {activeTab === 'customers' && (
-                <section className="customers-view">
-                    <div className="glass-card" style={{ marginBottom: '2rem' }}>
-                        <h2><Plus size={20} /> Nouveau Client</h2>
-                        <form onSubmit={handleAddCustomer} className="customer-form">
-                            <input type="text" placeholder="Prénom" value={newCustomer.first_name} onChange={e => setNewCustomer({ ...newCustomer, first_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
-                            <input type="text" placeholder="Nom" value={newCustomer.last_name} onChange={e => setNewCustomer({ ...newCustomer, last_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
-                            <input type="text" placeholder="Pseudo Facebook" value={newCustomer.facebook_pseudo} onChange={e => setNewCustomer({ ...newCustomer, facebook_pseudo: e.target.value })} className="glass-card" style={{ padding: '0.8rem' }} />
-                            <button type="submit" style={{ padding: '0.8rem 2rem' }}>Enregistrer</button>
-                        </form>
-                    </div>
-                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ position: 'relative' }}>
-                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
-                            <input
-                                type="text"
-                                className="glass-card"
-                                style={{ paddingLeft: '2.8rem' }}
-                                placeholder="Rechercher une cliente par nom ou prénom..."
-                                value={customerSearch}
-                                onChange={e => setCustomerSearch(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="customer-grid">
-                        {customers.filter(c => {
-                            const searchLower = customerSearch.toLowerCase();
-                            return (c.first_name + ' ' + c.last_name).toLowerCase().includes(searchLower) ||
-                                (c.facebook_pseudo || '').toLowerCase().includes(searchLower);
-                        }).map(c => {
-                            const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
-                            return (
-                                <div key={c.id} className="glass-card customer-card">
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <div>
-                                            <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                                            <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <button className="qty-btn" onClick={() => setViewingHistory(c)} title="Historique"><Clock size={16} /></button>
-                                            <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
-                                            <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
-                                        </div>
-                                    </div>
-                                    {activeOrder ? (
-                                        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                                            <span className="status-badge status-attente" style={{ flex: 1, textAlign: 'center' }}>Panier Ouvert</span>
-                                            <button className="tab-btn active" style={{ flex: 2, justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                                Reprendre <ArrowRight size={16} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                            Ouvrir un Panier <ArrowRight size={16} />
-                                        </button>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </section>
-            )}
-
-            {activeTab === 'orders' && (
-                <section className="orders-view">
-                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ position: 'relative' }}>
-                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
-                            <input
-                                type="text"
-                                className="glass-card"
-                                style={{ paddingLeft: '2.8rem' }}
-                                placeholder="Rechercher un panier par nom de cliente..."
-                                value={orderSearch}
-                                onChange={e => setOrderSearch(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="orders-grid">
-                        {orders.filter(o => {
-                            if (o.status !== 'attente') return false;
-                            const searchLower = orderSearch.toLowerCase();
-                            return `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
-                        }).map(order => (
-                            <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-focus' : ''}`}>
-                                <div className="order-header">
-                                    <div>
-                                        <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
-                                        <span className={`status-badge status-${order.status}`}>{order.status}</span>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button className="qty-btn" onClick={() => generateInvoice(order)} title="Générer Facture Provisoire"><FileText size={16} /></button>
-                                        <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
-                                    </div>
-                                </div>
-                                <div className="basket-items-list">
-                                    {order.order_items?.map((oi: any) => (
-                                        <div key={oi.id} className="basket-item">
-                                            <div>
-                                                <button className="remove-item-btn" onClick={() => removeOrderItem(order.id, oi.id)} title="Retirer"><MinusCircle size={14} color="#d90429" /></button>
-                                                <span>{oi.items?.title}</span>
-                                            </div>
-                                            <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
-                                        </div>
-                                    ))}
-                                    {(!order.order_items || order.order_items.length === 0) && <p style={{ opacity: 0.5, fontSize: '0.8rem', textAlign: 'center' }}>Le panier est vide</p>}
-                                </div>
-                                <div className="order-footer">
-                                    <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
-                                    <div className="order-actions">
-                                        <button className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {orders.filter(o => o.status === 'attente' && (orderSearch === '' || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(orderSearch.toLowerCase()))).length === 0 && (
-                            <div className="empty-state">{orderSearch ? 'Aucun panier trouvé.' : 'Aucun panier en cours.'}</div>
-                        )}
-                    </div>
-                </section>
-            )}
-
-            {activeTab === 'archives' && (
-                <section className="orders-view">
-                    <div className="search-container" style={{ marginBottom: '1.5rem' }}>
-                        <div style={{ position: 'relative' }}>
-                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
-                            <input
-                                type="text"
-                                className="glass-card"
-                                style={{ paddingLeft: '2.8rem' }}
-                                placeholder="Rechercher par Référence ou Nom..."
-                                value={archiveSearch}
-                                onChange={e => setArchiveSearch(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="orders-grid">
-                        {orders.filter(o => {
-                            if (o.status !== 'payé') return false;
-                            const searchLower = archiveSearch.toLowerCase();
-                            const matchesRef = o.reference?.toLowerCase().includes(searchLower);
-                            const matchesName = `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
-                            return matchesRef || matchesName;
-                        }).map(order => (
-                            <div key={order.id} className="glass-card order-card archived-card">
-                                <div className="order-header">
-                                    <div>
-                                        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
-                                            <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
-                                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700 }}>{order.reference}</span>
-                                        </div>
-                                        <span className="status-badge status-payé">Payé</span>
-                                    </div>
-                                    <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture Finale"><Download size={16} /></button>
-                                </div>
-                                <div className="basket-items-list">
-                                    {order.order_items?.map((oi: any) => (
-                                        <div key={oi.id} className="basket-item">
-                                            <span>{oi.items?.title} (x{oi.quantity})</span>
-                                            <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="order-footer">
-                                    <div>
-                                        <div className="total-tag">Payé: {order.total_price.toFixed(2)} €</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#38b000', fontWeight: 600, marginTop: '0.2rem' }}>
-                                            Bénéfice: +{order.order_items?.reduce((acc, oi) => acc + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0).toFixed(2)} €
-                                        </div>
-                                    </div>
-                                    <div className="order-actions">
-                                        <button className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Remettre en cours</button>
-                                        <button className="delete-btn" onClick={() => deleteOrder(order.id)} title="Supprimer Archive"><Trash2 size={16} /></button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {orders.filter(o => o.status === 'payé' && (archiveSearch === '' || (o.reference?.toLowerCase().includes(archiveSearch.toLowerCase()) || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(archiveSearch.toLowerCase())))).length === 0 && (
-                            <div className="empty-state">{archiveSearch ? 'Aucun résultat trouvé.' : 'Aucune archive pour le moment.'}</div>
-                        )}
-                    </div>
-                </section>
-            )}
-            {activeTab === 'stats' && (
-                <section className="stats-view">
-                    <div className="stats-dashboard" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '2rem' }}>
-                        <div className="glass-card stat-card">
-                            <TrendingUp size={20} color="#fb6f92" />
-                            <div className="stat-value">
-                                {orders.filter(o => o.status === 'payé').reduce((acc, o) => acc + o.total_price, 0).toFixed(2)} €
-                            </div>
-                            <div className="stat-label">Chiffre d'Affaires Global</div>
-                        </div>
-                        <div className="glass-card stat-card" style={{ borderLeft: '4px solid #38b000' }}>
-                            <Star size={20} color="#38b000" />
-                            <div className="stat-value" style={{ color: '#38b000' }}>
-                                {orders.filter(o => o.status === 'payé').reduce((acc, o) => {
-                                    const profit = (o.order_items || []).reduce((p, oi) => p + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0);
-                                    return acc + profit;
-                                }, 0).toFixed(2)} €
-                            </div>
-                            <div className="stat-label">Bénéfice Net Réel ✨</div>
-                        </div>
-                        <div className="glass-card stat-card">
-                            <Users size={20} color="#fb6f92" />
-                            <div className="stat-value">{customers.length}</div>
-                            <div className="stat-label">Clientes Fidèles</div>
-                        </div>
-                    </div>
-                    <div className="grid">
-                        <div className="glass-card">
-                            <h2><Star size={20} color="#FFD700" /> Top 5 Produits</h2>
-                            <div className="item-list" style={{ marginTop: '1.5rem' }}>
-                                {[...items].sort((a, b) => b.sold_quantity - a.sold_quantity).slice(0, 5).map((item, idx) => (
-                                    <div key={item.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
-                                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
-                                            <div>
-                                                <div className="item-title">{item.title}</div>
-                                                <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.sold_quantity} vendus</div>
-                                            </div>
-                                        </div>
-                                        <div className="price-tag">{(item.sold_quantity * item.sale_price).toFixed(2)} €</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="glass-card">
-                            <h2><Users size={20} color="#fb6f92" /> Meilleures Clientes (V.I.P)</h2>
-                            <div className="item-list" style={{ marginTop: '1.5rem' }}>
-                                {customers.map(c => {
-                                    const totalSpend = orders
-                                        .filter(o => o.customer_id === c.id && o.status === 'payé')
-                                        .reduce((acc, curr) => acc + curr.total_price, 0);
-                                    return { ...c, totalSpend };
-                                })
-                                    .sort((a, b) => b.totalSpend - a.totalSpend)
-                                    .slice(0, 5)
-                                    .map((vip, idx) => (
-                                        <div key={vip.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
-                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                                <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
-                                                <div>
-                                                    <div className="item-title">{vip.first_name} {vip.last_name}</div>
-                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>V.I.P Lovely ✨</div>
-                                                </div>
-                                            </div>
-                                            <div className="price-tag">{vip.totalSpend.toFixed(2)} €</div>
-                                        </div>
-                                    ))}
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            )}
+            {/* Modal Historique Client */}
             {viewingHistory && (
                 <div className="scanner-container" style={{ zIndex: 1100 }}>
                     <div className="glass-card" style={{ width: '95%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto' }}>
@@ -972,7 +636,485 @@ function App() {
                     </div>
                 </div>
             )}
-            <div className="version-badge">V4.0.0 Pro</div>
+
+            {/* Modal Authentification Admin V5.0 */}
+            {showAdminAuth && (
+                <div className="scanner-container" style={{ zIndex: 1200 }}>
+                    <div className="glass-card" style={{ width: '90%', maxWidth: '350px', textAlign: 'center' }}>
+                        <Lock size={40} color="var(--primary)" style={{ marginBottom: '1rem' }} />
+                        <h2 style={{ marginBottom: '1rem' }}>Accès Master Admin</h2>
+                        <form onSubmit={handleAdminLogin}>
+                            <div className="form-group">
+                                <label>Code de Sécurité</label>
+                                <input
+                                    type="password"
+                                    value={adminPasscode}
+                                    onChange={e => setAdminPasscode(e.target.value)}
+                                    placeholder="••••"
+                                    autoFocus
+                                    style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button type="button" className="tab-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.1)' }} onClick={() => setShowAdminAuth(false)}>Annuler</button>
+                                <button type="submit" style={{ flex: 1 }}>Entrer</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Edition Master Item V5.0 */}
+            {editingItem && (
+                <div className="scanner-container" style={{ zIndex: 1200 }}>
+                    <div className="glass-card" style={{ width: '95%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0 }}>Master Edit : {editingItem.title}</h2>
+                            <button className="delete-btn" onClick={() => setEditingItem(null)}><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handleUpdateItemFull}>
+                            <div className="form-group"><label>Titre de l'article</label><input type="text" value={editingItem.title} onChange={e => setEditingItem({ ...editingItem, title: e.target.value })} required /></div>
+                            <div className="form-group"><label>Code EAN</label><input type="text" value={editingItem.ean} onChange={e => setEditingItem({ ...editingItem, ean: e.target.value })} required /></div>
+                            <div className="form-group"><label>Catégorie</label>
+                                <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={editingItem.category.includes(' ') ? editingItem.category.split(' ')[1] : editingItem.category} onChange={e => {
+                                    const cat = CATEGORIES_WITH_EMOJIS.find(c => c.name === e.target.value) || CATEGORIES_WITH_EMOJIS[0];
+                                    setEditingItem({ ...editingItem, category: `${cat.emoji} ${cat.name}` });
+                                }}>
+                                    {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                </select>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div className="form-group"><label>Stock Exact</label><input type="number" value={editingItem.quantity} onChange={e => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 0 })} /></div>
+                                <div className="form-group"><label>Vendus (Ratio)</label><input type="number" value={editingItem.sold_quantity} onChange={e => setEditingItem({ ...editingItem, sold_quantity: parseInt(e.target.value) || 0 })} /></div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={editingItem.purchase_price} onChange={e => setEditingItem({ ...editingItem, purchase_price: parseFloat(e.target.value) || 0 })} /></div>
+                                <div className="form-group"><label>Prix Vente (€)</label><input type="number" step="0.01" value={editingItem.sale_price} onChange={e => setEditingItem({ ...editingItem, sale_price: parseFloat(e.target.value) || 0 })} /></div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                                <button type="button" className="tab-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.1)' }} onClick={() => setEditingItem(null)}>Annuler</button>
+                                <button type="submit" style={{ flex: 1 }}>Mettre à Jour</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            <header>
+                {isAdminMode && (
+                    <button
+                        className="glass-card"
+                        style={{ position: 'fixed', top: '1.5rem', left: '1.5rem', width: 'auto', padding: '0.6rem 1rem', background: 'var(--primary)', color: 'white', zIndex: 1000, display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                        onClick={() => { setIsAdminMode(false); showToast("Mode Admin Quitté 👋"); }}
+                    >
+                        <Lock size={16} /> Quitter Admin
+                    </button>
+                )}
+                {!isAdminMode && (
+                    <div
+                        style={{ position: 'fixed', top: '1.5rem', left: '1.5rem', cursor: 'pointer', opacity: 0.3, zIndex: 1000 }}
+                        onClick={() => setShowAdminAuth(true)}
+                        title="Master Admin"
+                    >
+                        <Lock size={20} />
+                    </div>
+                )}
+                <div className="logo-container"><img src="/logo.jpg" alt="Logo" className="site-logo" /></div>
+                <h1>Lovely Shopping</h1>
+                <p className="subtitle">Luxe & Élégance au Quotidien</p>
+            </header>
+
+            <nav className="view-tabs">
+                <button className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}><Package size={18} /> Stocks</button>
+                <button className={`tab-btn ${activeTab === 'customers' ? 'active' : ''}`} onClick={() => setActiveTab('customers')}><Users size={18} /> Clients</button>
+                <button className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}><ShoppingCart size={18} /> Panier</button>
+                <button className={`tab-btn ${activeTab === 'archives' ? 'active' : ''}`} onClick={() => { setActiveTab('archives'); setActiveOrderId(null); }}><Archive size={18} /> Archives</button>
+                <button className={`tab-btn ${activeTab === 'stats' ? 'active' : ''}`} onClick={() => { setActiveTab('stats'); setActiveOrderId(null); }}><BarChart3 size={18} /> Stats</button>
+            </nav>
+
+            {
+                activeOrderId && activeTab === 'inventory' && (
+                    <div className="glass-card active-basket-banner">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                            <div className="pulse-icon"><ShoppingCart size={20} /></div>
+                            <span style={{ fontWeight: 700 }}>Remplissage du panier de {activeCustomerName}...</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button className="tab-btn" style={{ background: 'white', color: 'var(--primary)', padding: '0.4rem 1rem' }} onClick={() => { setActiveTab('orders'); setActiveOrderId(null); }}>Valider Panier</button>
+                            <button className="tab-btn" style={{ background: 'rgba(255,255,255,0.2)', border: 'none', padding: '0.4rem' }} onClick={() => setActiveOrderId(null)} title="Changer de client"><Plus style={{ transform: 'rotate(45deg)' }} size={18} /></button>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                activeTab === 'inventory' && (
+                    <>
+                        {!activeOrderId && (
+                            <section className="stats-dashboard">
+                                <div className="glass-card stat-card">
+                                    <TrendingUp size={20} color="#fb6f92" />
+                                    <div className="stat-value">{items.reduce((a, i) => a + (i.sold_quantity * i.sale_price), 0).toFixed(2)} €</div>
+                                    <div className="stat-label">Ventes (24h)</div>
+                                </div>
+                                <div className="glass-card stat-card">
+                                    <AlertTriangle size={20} color="#d90429" />
+                                    <div className="stat-value" style={{ color: '#d90429' }}>{items.filter(i => i.quantity <= 1).length}</div>
+                                    <div className="stat-label">Alertes Stock</div>
+                                </div>
+                            </section>
+                        )}
+
+                        <div className={`grid ${activeOrderId ? 'focus-mode' : ''}`}>
+                            {!activeOrderId && (
+                                <aside>
+                                    <div className="glass-card">
+                                        <h2 style={{ marginBottom: '1.5rem' }}><Plus size={20} /> Ajouter Article</h2>
+                                        <form onSubmit={handleAddItem}>
+                                            <div className="form-group"><label>Intitulé</label><input type="text" value={newItem.title} onChange={e => setNewItem({ ...newItem, title: e.target.value })} required /></div>
+                                            <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
+                                            <div className="form-group"><label>Catégorie</label>
+                                                <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
+                                                    {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
+                                            <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
+                                            <div className="multiplier-grid">
+                                                {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
+                                            </div>
+                                            <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
+                                            <button type="submit">Enregistrer dans le Stock</button>
+                                        </form>
+                                    </div>
+                                </aside>
+                            )}
+                            <main>
+                                <div className="search-container" style={{ display: 'flex', gap: '1rem' }}>
+                                    <div style={{ position: 'relative', flex: 1 }}>
+                                        <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                                        <input type="text" className="glass-card" style={{ paddingLeft: '2.8rem', paddingRight: '2.8rem' }} placeholder="Rechercher par nom ou EAN..." value={search} onChange={e => setSearch(e.target.value)} />
+                                        <Scan style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }} size={18} onClick={() => setScannerConfig({ active: true, target: 'search' })} />
+                                    </div>
+                                    <select className="glass-card" style={{ width: '150px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
+                                        <option value="Tous">📦 Tous</option>
+                                        {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="item-list">
+                                    {filteredItems.map(item => (
+                                        <div key={item.id} className={`glass-card item-card ${item.quantity <= 1 ? 'stock-alert' : ''}`}>
+                                            <div className="item-info">
+                                                <div className="item-title">{item.title}</div>
+                                                <div className="item-ean" style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.ean} | {item.category}</div>
+                                                <div className="price-tag">{item.sale_price.toFixed(2)} €</div>
+                                            </div>
+                                            <div className="item-stats">
+                                                <div className="stat-group"><span className="stat-label">Stock</span>
+                                                    <div className="qty-controls">
+                                                        <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
+                                                        <span className="qty-badge">{item.quantity}</span>
+                                                        <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    className={`add-basket-refined ${activeOrderId ? 'highlight' : ''}`}
+                                                    onClick={() => {
+                                                        if (activeOrderId) addItemToOrder(activeOrderId, item);
+                                                        else {
+                                                            const order = orders.find(o => o.status === 'attente');
+                                                            if (order) {
+                                                                setActiveOrderId(order.id);
+                                                                addItemToOrder(order.id, item);
+                                                            } else alert("Veuillez sélectionner un client d'abord !");
+                                                        }
+                                                    }}
+                                                    title="Ajouter au Panier"
+                                                >
+                                                    <ShoppingCart size={18} />
+                                                    {activeOrderId && <span className="add-badge">+1</span>}
+                                                </button>
+                                                {isAdminMode && (
+                                                    <button className="delete-btn" title="Modifier Master" onClick={() => setEditingItem(item)}>
+                                                        <Edit size={18} color="var(--primary)" />
+                                                    </button>
+                                                )}
+                                                <button className="delete-btn" onClick={() => deleteItem(item.id)}><Trash2 size={18} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </main>
+                        </div>
+                    </>
+                )
+            }
+
+            {
+                activeTab === 'customers' && (
+                    <section className="customers-view">
+                        <div className="glass-card" style={{ marginBottom: '2rem' }}>
+                            <h2><Plus size={20} /> Nouveau Client</h2>
+                            <form onSubmit={handleAddCustomer} className="customer-form">
+                                <input type="text" placeholder="Prénom" value={newCustomer.first_name} onChange={e => setNewCustomer({ ...newCustomer, first_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
+                                <input type="text" placeholder="Nom" value={newCustomer.last_name} onChange={e => setNewCustomer({ ...newCustomer, last_name: e.target.value })} required className="glass-card" style={{ padding: '0.8rem' }} />
+                                <input type="text" placeholder="Pseudo Facebook" value={newCustomer.facebook_pseudo} onChange={e => setNewCustomer({ ...newCustomer, facebook_pseudo: e.target.value })} className="glass-card" style={{ padding: '0.8rem' }} />
+                                <button type="submit" style={{ padding: '0.8rem 2rem' }}>Enregistrer</button>
+                            </form>
+                        </div>
+                        <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ position: 'relative' }}>
+                                <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                                <input
+                                    type="text"
+                                    className="glass-card"
+                                    style={{ paddingLeft: '2.8rem' }}
+                                    placeholder="Rechercher une cliente par nom ou prénom..."
+                                    value={customerSearch}
+                                    onChange={e => setCustomerSearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="customer-grid">
+                            {customers.filter(c => {
+                                const searchLower = customerSearch.toLowerCase();
+                                return (c.first_name + ' ' + c.last_name).toLowerCase().includes(searchLower) ||
+                                    (c.facebook_pseudo || '').toLowerCase().includes(searchLower);
+                            }).map(c => {
+                                const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
+                                return (
+                                    <div key={c.id} className="glass-card customer-card">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <div>
+                                                <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                                                <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button className="qty-btn" onClick={() => setViewingHistory(c)} title="Historique"><Clock size={16} /></button>
+                                                <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
+                                                <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
+                                            </div>
+                                        </div>
+                                        {activeOrder ? (
+                                            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                                <span className="status-badge status-attente" style={{ flex: 1, textAlign: 'center' }}>Panier Ouvert</span>
+                                                <button className="tab-btn active" style={{ flex: 2, justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                                    Reprendre <ArrowRight size={16} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                                Ouvrir un Panier <ArrowRight size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )
+            }
+
+            {
+                activeTab === 'orders' && (
+                    <section className="orders-view">
+                        <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ position: 'relative' }}>
+                                <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                                <input
+                                    type="text"
+                                    className="glass-card"
+                                    style={{ paddingLeft: '2.8rem' }}
+                                    placeholder="Rechercher un panier par nom de cliente..."
+                                    value={orderSearch}
+                                    onChange={e => setOrderSearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="orders-grid">
+                            {orders.filter(o => {
+                                if (o.status !== 'attente') return false;
+                                const searchLower = orderSearch.toLowerCase();
+                                return `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
+                            }).map(order => (
+                                <div key={order.id} className={`glass-card order-card ${activeOrderId === order.id ? 'active-focus' : ''}`}>
+                                    <div className="order-header">
+                                        <div>
+                                            <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
+                                            <span className={`status-badge status-${order.status}`}>{order.status}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button className="qty-btn" onClick={() => generateInvoice(order)} title="Générer Facture Provisoire"><FileText size={16} /></button>
+                                            <button className="delete-btn" onClick={() => deleteOrder(order.id)}><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                    <div className="basket-items-list">
+                                        {order.order_items?.map((oi: any) => (
+                                            <div key={oi.id} className="basket-item">
+                                                <div>
+                                                    <button className="remove-item-btn" onClick={() => removeOrderItem(order.id, oi.id)} title="Retirer"><MinusCircle size={14} color="#d90429" /></button>
+                                                    <span>{oi.items?.title}</span>
+                                                </div>
+                                                <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
+                                            </div>
+                                        ))}
+                                        {(!order.order_items || order.order_items.length === 0) && <p style={{ opacity: 0.5, fontSize: '0.8rem', textAlign: 'center' }}>Le panier est vide</p>}
+                                    </div>
+                                    <div className="order-footer">
+                                        <div className="total-tag">Total: {order.total_price.toFixed(2)} €</div>
+                                        <div className="order-actions">
+                                            <button className="tab-btn active pay-btn" onClick={() => updateOrderStatus(order, 'payé')}><CheckCircle2 size={16} /> Marquer Payé</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {orders.filter(o => o.status === 'attente' && (orderSearch === '' || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(orderSearch.toLowerCase()))).length === 0 && (
+                                <div className="empty-state">{orderSearch ? 'Aucun panier trouvé.' : 'Aucun panier en cours.'}</div>
+                            )}
+                        </div>
+                    </section>
+                )
+            }
+
+            {
+                activeTab === 'archives' && (
+                    <section className="orders-view">
+                        <div className="search-container" style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ position: 'relative' }}>
+                                <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} size={18} />
+                                <input
+                                    type="text"
+                                    className="glass-card"
+                                    style={{ paddingLeft: '2.8rem' }}
+                                    placeholder="Rechercher par Référence ou Nom..."
+                                    value={archiveSearch}
+                                    onChange={e => setArchiveSearch(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="orders-grid">
+                            {orders.filter(o => {
+                                if (o.status !== 'payé') return false;
+                                const searchLower = archiveSearch.toLowerCase();
+                                const matchesRef = o.reference?.toLowerCase().includes(searchLower);
+                                const matchesName = `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(searchLower);
+                                return matchesRef || matchesName;
+                            }).map(order => (
+                                <div key={order.id} className="glass-card order-card archived-card">
+                                    <div className="order-header">
+                                        <div>
+                                            <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+                                                <h3 style={{ margin: 0 }}>{order.customers?.first_name} {order.customers?.last_name}</h3>
+                                                <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700 }}>{order.reference}</span>
+                                            </div>
+                                            <span className="status-badge status-payé">Payé</span>
+                                        </div>
+                                        <button className="qty-btn" onClick={() => generateInvoice(order)} title="Télécharger Facture Finale"><Download size={16} /></button>
+                                    </div>
+                                    <div className="basket-items-list">
+                                        {order.order_items?.map((oi: any) => (
+                                            <div key={oi.id} className="basket-item">
+                                                <span>{oi.items?.title} (x{oi.quantity})</span>
+                                                <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="order-footer">
+                                        <div>
+                                            <div className="total-tag">Payé: {order.total_price.toFixed(2)} €</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#38b000', fontWeight: 600, marginTop: '0.2rem' }}>
+                                                Bénéfice: +{order.order_items?.reduce((acc, oi) => acc + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0).toFixed(2)} €
+                                            </div>
+                                        </div>
+                                        <div className="order-actions">
+                                            <button className="tab-btn" onClick={() => updateOrderStatus(order, 'attente')}><Clock size={16} /> Remettre en cours</button>
+                                            <button className="delete-btn" onClick={() => deleteOrder(order.id)} title="Supprimer Archive"><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {orders.filter(o => o.status === 'payé' && (archiveSearch === '' || (o.reference?.toLowerCase().includes(archiveSearch.toLowerCase()) || `${o.customers?.first_name} ${o.customers?.last_name}`.toLowerCase().includes(archiveSearch.toLowerCase())))).length === 0 && (
+                                <div className="empty-state">{archiveSearch ? 'Aucun résultat trouvé.' : 'Aucune archive pour le moment.'}</div>
+                            )}
+                        </div>
+                    </section>
+                )
+            }
+            {
+                activeTab === 'stats' && (
+                    <section className="stats-view">
+                        <div className="stats-dashboard" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', marginBottom: '2rem' }}>
+                            <div className="glass-card stat-card">
+                                <TrendingUp size={20} color="#fb6f92" />
+                                <div className="stat-value">
+                                    {orders.filter(o => o.status === 'payé').reduce((acc, o) => acc + o.total_price, 0).toFixed(2)} €
+                                </div>
+                                <div className="stat-label">Chiffre d'Affaires Global</div>
+                            </div>
+                            <div className="glass-card stat-card" style={{ borderLeft: '4px solid #38b000' }}>
+                                <Star size={20} color="#38b000" />
+                                <div className="stat-value" style={{ color: '#38b000' }}>
+                                    {orders.filter(o => o.status === 'payé').reduce((acc, o) => {
+                                        const profit = (o.order_items || []).reduce((p, oi) => p + ((oi.unit_price - (oi.purchase_unit_price || 0)) * oi.quantity), 0);
+                                        return acc + profit;
+                                    }, 0).toFixed(2)} €
+                                </div>
+                                <div className="stat-label">Bénéfice Net Réel ✨</div>
+                            </div>
+                            <div className="glass-card stat-card">
+                                <Users size={20} color="#fb6f92" />
+                                <div className="stat-value">{customers.length}</div>
+                                <div className="stat-label">Clientes Fidèles</div>
+                            </div>
+                        </div>
+                        <div className="grid">
+                            <div className="glass-card">
+                                <h2><Star size={20} color="#FFD700" /> Top 5 Produits</h2>
+                                <div className="item-list" style={{ marginTop: '1.5rem' }}>
+                                    {[...items].sort((a, b) => b.sold_quantity - a.sold_quantity).slice(0, 5).map((item, idx) => (
+                                        <div key={item.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
+                                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
+                                                <div>
+                                                    <div className="item-title">{item.title}</div>
+                                                    <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{item.sold_quantity} vendus</div>
+                                                </div>
+                                            </div>
+                                            <div className="price-tag">{(item.sold_quantity * item.sale_price).toFixed(2)} €</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="glass-card">
+                                <h2><Users size={20} color="#fb6f92" /> Meilleures Clientes (V.I.P)</h2>
+                                <div className="item-list" style={{ marginTop: '1.5rem' }}>
+                                    {customers.map(c => {
+                                        const totalSpend = orders
+                                            .filter(o => o.customer_id === c.id && o.status === 'payé')
+                                            .reduce((acc, curr) => acc + curr.total_price, 0);
+                                        return { ...c, totalSpend };
+                                    })
+                                        .sort((a, b) => b.totalSpend - a.totalSpend)
+                                        .slice(0, 5)
+                                        .map((vip, idx) => (
+                                            <div key={vip.id} className={`glass-card item-card ${idx === 0 ? 'top-performer' : ''}`}>
+                                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                                    <span style={{ fontSize: '1.5rem', fontWeight: 900, opacity: 0.3 }}>{idx + 1}</span>
+                                                    <div>
+                                                        <div className="item-title">{vip.first_name} {vip.last_name}</div>
+                                                        <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>V.I.P Lovely ✨</div>
+                                                    </div>
+                                                </div>
+                                                <div className="price-tag">{vip.totalSpend.toFixed(2)} €</div>
+                                            </div>
+                                        ))}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                )
+            }
+            <div className="version-badge">V5.0.0 Master Admin Mode</div>
         </div>
     )
 }
