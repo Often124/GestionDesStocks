@@ -188,6 +188,22 @@ function App() {
         }
     }, [newItem.purchase_price]);
 
+    // Calcul automatique de la TVA (x1.20) pour le mode Edition Master V5.1
+    useEffect(() => {
+        if (editingItem && editingItem.purchase_price !== undefined) {
+            const purchase = typeof editingItem.purchase_price === 'string' ? parseFloat(editingItem.purchase_price) : editingItem.purchase_price;
+            if (!isNaN(purchase) && purchase > 0) {
+                // On ne met à jour que si le prix de vente est vide ou si on veut forcer le calcul initial
+                // Pour éviter d'écraser une modif manuelle volontaire, on peut aussi décider de toujours recalculer
+                // Ici, on va suivre la demande : "prix d'achat ça calcul directement la tva"
+                setEditingItem(prev => prev ? ({
+                    ...prev,
+                    sale_price: parseFloat((purchase * 1.20).toFixed(2))
+                }) : null);
+            }
+        }
+    }, [editingItem?.purchase_price]);
+
     const handleAdminLogin = (e: React.FormEvent) => {
         e.preventDefault();
         if (adminPasscode === '8888') {
@@ -688,8 +704,32 @@ function App() {
                                 <div className="form-group"><label>Vendus (Ratio)</label><input type="number" value={editingItem.sold_quantity} onChange={e => setEditingItem({ ...editingItem, sold_quantity: parseInt(e.target.value) || 0 })} /></div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={editingItem.purchase_price} onChange={e => setEditingItem({ ...editingItem, purchase_price: parseFloat(e.target.value) || 0 })} /></div>
+                                <div className="form-group">
+                                    <label>Prix Achat (€)</label>
+                                    <input type="number" step="0.01" value={editingItem.purchase_price} onChange={e => setEditingItem({ ...editingItem, purchase_price: parseFloat(e.target.value) || 0 })} />
+                                    {editingItem.purchase_price > 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem', fontWeight: 600 }}>
+                                            ✨ TVA 20% incluse : +{(editingItem.purchase_price * 0.20).toFixed(2)} €
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="form-group"><label>Prix Vente (€)</label><input type="number" step="0.01" value={editingItem.sale_price} onChange={e => setEditingItem({ ...editingItem, sale_price: parseFloat(e.target.value) || 0 })} /></div>
+                            </div>
+                            <div className="multiplier-grid" style={{ marginBottom: '1rem' }}>
+                                {[2, 2.5, 3, 3.5, 4, 4.5].map(m => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        className="multiplier-btn"
+                                        onClick={() => {
+                                            const priceWithTVA = editingItem.purchase_price * 1.20;
+                                            setEditingItem({ ...editingItem, sale_price: parseFloat((priceWithTVA * m).toFixed(2)) });
+                                        }}
+                                        title={`Prix x${m} (TVA incluse)`}
+                                    >
+                                        x{m}
+                                    </button>
+                                ))}
                             </div>
                             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
                                 <button type="button" className="tab-btn" style={{ flex: 1, background: 'rgba(255,255,255,0.1)' }} onClick={() => setEditingItem(null)}>Annuler</button>
@@ -779,9 +819,21 @@ function App() {
                                                 </select>
                                             </div>
                                             <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
-                                            <div className="form-group"><label>Prix Achat (€)</label><input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" /></div>
+                                            <div className="form-group">
+                                                <label>Prix Achat (€)</label>
+                                                <input type="number" step="0.01" value={newItem.purchase_price} onChange={e => setNewItem({ ...newItem, purchase_price: e.target.value })} placeholder="0.00" />
+                                                {newItem.purchase_price && !isNaN(parseFloat(newItem.purchase_price)) && (
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem', fontWeight: 600 }}>
+                                                        ✨ TVA 20% incluse : +{(parseFloat(newItem.purchase_price) * 0.20).toFixed(2)} €
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="multiplier-grid">
-                                                {[2, 2.5, 3, 3.5, 4, 4.5].map(m => <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)}>x{m}</button>)}
+                                                {[2, 2.5, 3, 3.5, 4, 4.5].map(m => (
+                                                    <button key={m} type="button" className="multiplier-btn" onClick={() => applyMultiplier(m)} title={`Prix x${m} (TVA incluse)`}>
+                                                        x{m}
+                                                    </button>
+                                                ))}
                                             </div>
                                             <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
                                             <button type="submit">Enregistrer dans le Stock</button>
@@ -1114,7 +1166,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V5.0.0 Master Admin Mode</div>
+            <div className="version-badge">V5.1.0 Master Admin Mode</div>
         </div>
     )
 }
