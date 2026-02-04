@@ -48,6 +48,12 @@ interface Customer {
     facebook_pseudo: string;
 }
 
+interface Category {
+    id: string;
+    name: string;
+    emoji: string;
+}
+
 interface Order {
     id: string;
     customer_id: string;
@@ -70,17 +76,7 @@ interface OrderItem {
     items?: Item;
 }
 
-const CATEGORIES_WITH_EMOJIS = [
-    { name: 'Général', emoji: '📦' },
-    { name: 'Vêtement', emoji: '👗' },
-    { name: 'Beauté', emoji: '💄' },
-    { name: 'Sac', emoji: '👜' },
-    { name: 'Accessoires', emoji: '🎀' },
-    { name: 'Bougie', emoji: '🕯️' },
-    { name: 'Parfum', emoji: '✨' },
-    { name: 'Parfum d\'ambiance', emoji: '🏠' },
-    { name: 'Bain Douche', emoji: '🧴' }
-];
+// Les catégories sont désormais gérées via Supabase (Table 'categories')
 
 function App() {
     const [activeTab, setActiveTab] = useState<'inventory' | 'customers' | 'orders' | 'archives' | 'stats'>('inventory');
@@ -90,6 +86,7 @@ function App() {
     const [items, setItems] = useState<Item[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [orders, setOrders] = useState<Order[]>([]);
+    const [categories, setCategories] = useState<Category[]>([]);
 
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('Tous');
@@ -113,6 +110,8 @@ function App() {
     const [adminPasscode, setAdminPasscode] = useState('');
     const [editingItem, setEditingItem] = useState<Item | null>(null);
     const [selectingPaymentOrder, setSelectingPaymentOrder] = useState<Order | null>(null);
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [newCategory, setNewCategory] = useState({ name: '', emoji: '📦' });
 
     const generateOrderRef = () => {
         return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -130,7 +129,8 @@ function App() {
             supabase.channel('public:items').on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, () => fetchData()).subscribe(),
             supabase.channel('public:customers').on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => fetchData()).subscribe(),
             supabase.channel('public:orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchData()).subscribe(),
-            supabase.channel('public:order_items').on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchData()).subscribe()
+            supabase.channel('public:order_items').on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchData()).subscribe(),
+            supabase.channel('public:categories').on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => fetchData()).subscribe()
         ];
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, []);
@@ -247,12 +247,13 @@ function App() {
 
     const fetchData = async () => {
         setLoading(true);
-        const [itemsRes, customersRes, ordersRes] = await Promise.all([
+        const [itemsRes, customersRes, ordersRes, categoriesRes] = await Promise.all([
             supabase.from('items').select('*').order('created_at', { ascending: false }),
             supabase.from('customers').select('*').order('last_name', { ascending: true }),
             supabase.from('orders')
                 .select('*, customers(*), order_items(*, items(*))')
-                .order('created_at', { ascending: false })
+                .order('created_at', { ascending: false }),
+            supabase.from('categories').select('*').order('name', { ascending: true })
         ]);
 
         if (itemsRes.data) {
@@ -273,7 +274,38 @@ function App() {
             }));
             setOrders(ordersData as Order[]);
         }
+        if (categoriesRes.data) setCategories(categoriesRes.data);
         setLoading(false);
+    };
+
+    const handleAddCategory = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newCategory.name.trim()) return;
+        const { error } = await supabase.from('categories').insert([
+            { name: newCategory.name.trim(), emoji: newCategory.emoji }
+        ]);
+        if (!error) {
+            setNewCategory({ name: '', emoji: '📦' });
+            showToast("Catégorie ajoutée ! ✅");
+            fetchData();
+        } else {
+            alert(error.message);
+        }
+    };
+
+    const deleteCategory = async (id: string, name: string) => {
+        const hasItems = items.some(i => i.category.includes(name));
+        if (hasItems) {
+            alert("Impossible de supprimer une catégorie qui contient des articles.");
+            return;
+        }
+        if (confirm(`Supprimer la catégorie "${name}" ?`)) {
+            const { error } = await supabase.from('categories').delete().eq('id', id);
+            if (!error) {
+                showToast("Catégorie supprimée.");
+                fetchData();
+            }
+        }
     };
 
     const applyMultiplier = (multiplier: number) => {
@@ -289,11 +321,14 @@ function App() {
 
     const handleAddItem = async (e: React.FormEvent) => {
         e.preventDefault();
-        const catObj = CATEGORIES_WITH_EMOJIS.find(c => c.name === newItem.category) || CATEGORIES_WITH_EMOJIS[0];
+        // Modification V7.0 : Récupérer l'emoji depuis la base de données
+        const catObj = categories.find(c => c.name === newItem.category) || categories[0];
+        const categoryString = catObj ? `${catObj.emoji} ${catObj.name}` : newItem.category;
+
         const { error } = await supabase.from('items').insert([{
             ...newItem,
             title: newItem.title.trim(),
-            category: `${catObj.emoji} ${catObj.name}`,
+            category: categoryString,
             purchase_price: parseFloat(newItem.purchase_price) || 0,
             sale_price: parseFloat(newItem.sale_price) || 0,
             quantity: parseInt(newItem.quantity) || 0,
@@ -700,11 +735,11 @@ function App() {
                             <div className="form-group"><label>Titre de l'article</label><input type="text" value={editingItem.title} onChange={e => setEditingItem({ ...editingItem, title: e.target.value })} required /></div>
                             <div className="form-group"><label>Code EAN</label><input type="text" value={editingItem.ean} onChange={e => setEditingItem({ ...editingItem, ean: e.target.value })} required /></div>
                             <div className="form-group"><label>Catégorie</label>
-                                <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={editingItem.category.includes(' ') ? editingItem.category.split(' ')[1] : editingItem.category} onChange={e => {
-                                    const cat = CATEGORIES_WITH_EMOJIS.find(c => c.name === e.target.value) || CATEGORIES_WITH_EMOJIS[0];
+                                <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={editingItem.category.includes(' ') ? editingItem.category.split(' ').slice(1).join(' ') : editingItem.category} onChange={e => {
+                                    const cat = categories.find(c => c.name === e.target.value) || categories[0];
                                     setEditingItem({ ...editingItem, category: `${cat.emoji} ${cat.name}` });
                                 }}>
-                                    {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                    {categories.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
                                 </select>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -783,15 +818,63 @@ function App() {
                 </div>
             )}
 
+            {/* Modal Gestionnaire de Catégories V7.0 */}
+            {showCategoryManager && (
+                <div className="scanner-container" style={{ zIndex: 1300 }}>
+                    <div className="glass-card" style={{ width: '90%', maxWidth: '450px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0 }}>Gestion des Catégories</h2>
+                            <button className="delete-btn" onClick={() => setShowCategoryManager(false)}><X size={20} /></button>
+                        </div>
+
+                        <form onSubmit={handleAddCategory} style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: '80px 1fr auto', gap: '0.5rem' }}>
+                            <input
+                                type="text"
+                                value={newCategory.emoji}
+                                onChange={e => setNewCategory({ ...newCategory, emoji: e.target.value })}
+                                placeholder="Emoji"
+                                title="Appuyez sur Win+. pour les emojis"
+                                style={{ textAlign: 'center' }}
+                            />
+                            <input
+                                type="text"
+                                value={newCategory.name}
+                                onChange={e => setNewCategory({ ...newCategory, name: e.target.value })}
+                                placeholder="Nom de catégorie..."
+                            />
+                            <button type="submit" style={{ padding: '0.8rem' }}><Plus size={20} /></button>
+                        </form>
+
+                        <div className="item-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                            {categories.map(cat => (
+                                <div key={cat.id} className="glass-card" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.8rem', marginBottom: '0.5rem', background: 'rgba(255,255,255,0.05)' }}>
+                                    <span>{cat.emoji} {cat.name}</span>
+                                    <button className="delete-btn" onClick={() => deleteCategory(cat.id, cat.name)}><Trash2 size={16} /></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <header>
                 {isAdminMode && (
-                    <button
-                        className="glass-card"
-                        style={{ position: 'fixed', top: '1.5rem', left: '1.5rem', width: 'auto', padding: '0.6rem 1rem', background: 'var(--primary)', color: 'white', zIndex: 1000, display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 700 }}
-                        onClick={() => { setIsAdminMode(false); showToast("Mode Admin Quitté 👋"); }}
-                    >
-                        <Lock size={16} /> Quitter Admin
-                    </button>
+                    <div style={{ position: 'fixed', top: '1.5rem', left: '1.5rem', zIndex: 1000, display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            className="glass-card"
+                            style={{ width: 'auto', padding: '0.6rem 1rem', background: 'var(--primary)', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+                            onClick={() => { setIsAdminMode(false); showToast("Mode Admin Quitté 👋"); }}
+                        >
+                            <Lock size={16} /> Quitter Admin
+                        </button>
+                        <button
+                            className="glass-card"
+                            style={{ width: 'auto', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.2)', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 600, backdropFilter: 'blur(10px)' }}
+                            onClick={() => setShowCategoryManager(true)}
+                        >
+                            <Package size={16} /> Catégories
+                        </button>
+                    </div>
                 )}
                 {!isAdminMode && (
                     <div
@@ -858,7 +941,7 @@ function App() {
                                             <div className="form-group"><label style={{ display: 'flex', justifyContent: 'space-between' }}>EAN <Scan size={16} style={{ cursor: 'pointer' }} onClick={() => setScannerConfig({ active: true, target: 'new' })} /></label><input type="text" value={newItem.ean} onChange={e => setNewItem({ ...newItem, ean: e.target.value })} maxLength={13} required /></div>
                                             <div className="form-group"><label>Catégorie</label>
                                                 <select className="glass-card" style={{ width: '100%', padding: '0.8rem' }} value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })}>
-                                                    {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                                    {categories.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
                                                 </select>
                                             </div>
                                             <div className="form-group"><label>Stock Initial</label><input type="number" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} placeholder="0" /></div>
@@ -893,7 +976,7 @@ function App() {
                                     </div>
                                     <select className="glass-card" style={{ width: '150px' }} value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}>
                                         <option value="Tous">📦 Tous</option>
-                                        {CATEGORIES_WITH_EMOJIS.map(c => <option key={c.name} value={c.name}>{c.emoji} {c.name}</option>)}
+                                        {categories.map(c => <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>)}
                                     </select>
                                 </div>
                                 <div className="item-list">
@@ -1214,7 +1297,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V6.0.0 Payment Methods</div>
+            <div className="version-badge">V7.0.0 Dynamic Categories</div>
         </div>
     )
 }
