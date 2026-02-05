@@ -1297,7 +1297,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V7.0.0 Dynamic Categories</div>
+            <div className="version-badge">V7.1.0 Dynamic Categories & Polish</div>
         </div>
     )
 }

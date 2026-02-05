@@ -80,7 +80,7 @@ header {
 h1 {
     font-size: 2.5rem;
     font-weight: 800;
-    background: linear-gradient(to right, #ff477e, #00f2fe);
+    background: linear-gradient(135deg, #ff477e, #ff85a2, #fbb1bd, #ffd700); background-size: 200% auto; filter: drop-shadow(0 4px 8px rgba(251, 111, 146, 0.3)); animation: shine-text 5s linear infinite;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -865,3 +865,9 @@ button:hover {
 
 
 
+
+@keyframes shine-text {
+    0% { background-position: 0% center; }
+    50% { background-position: 100% center; }
+    100% { background-position: 0% center; }
+}
