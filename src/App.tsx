@@ -996,9 +996,9 @@ function App() {
                                             <div className="item-stats">
                                                 <div className="stat-group"><span className="stat-label">Stock</span>
                                                     <div className="qty-controls">
-                                                        <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>
+                                                        {isAdminMode && <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', -1)}>-</button>}
                                                         <span className="qty-badge">{item.quantity}</span>
-                                                        <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
+                                                        {isAdminMode && <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>}
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
@@ -1339,7 +1339,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V8.0.0 Advanced Controls</div>
+            <div className="version-badge">V8.1.0 Restricted Controls</div>
         </div>
     )
 }
