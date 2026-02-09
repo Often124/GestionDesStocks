@@ -63,6 +63,12 @@ header {
     animation: fadeInDown 0.8s ease-out;
 }
 
+@media (max-width: 768px) {
+    header {
+        margin-bottom: 2rem;
+    }
+}
+
 .logo-container {
     margin-bottom: 1rem;
 }
@@ -80,7 +86,10 @@ header {
 h1 {
     font-size: 2.5rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #ff477e, #ff85a2, #fbb1bd, #ffd700); background-size: 200% auto; filter: drop-shadow(0 4px 8px rgba(251, 111, 146, 0.3)); animation: shine-text 5s linear infinite;
+    background: linear-gradient(135deg, #ff477e, #ff85a2, #fbb1bd, #ffd700);
+    background-size: 200% auto;
+    filter: drop-shadow(0 4px 8px rgba(251, 111, 146, 0.3));
+    animation: shine-text 5s linear infinite;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -445,15 +454,26 @@ button:hover {
 
 @media (max-width: 768px) {
     .view-tabs {
-        flex-wrap: wrap;
-        gap: 0.5rem;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding-bottom: 1rem;
+        -webkit-overflow-scrolling: touch;
+        width: 100vw;
+        margin-left: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
 
     .tab-btn {
         padding: 0.6rem 1rem;
         font-size: 0.85rem;
-        flex: 1 1 calc(50% - 0.5rem);
+        flex: 0 0 auto;
         justify-content: center;
+    }
+
+    .view-tabs::-webkit-scrollbar {
+        display: none;
     }
 }
 
@@ -518,20 +538,17 @@ button:hover {
     }
 }
 
-@keyframes pulse-glow {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(251, 111, 146, 0.7);
+@media (max-width: 480px) {
+    .view-tabs {
+        padding: 0 0.5rem;
     }
 
-    70% {
-        transform: scale(1.05);
-        box-shadow: 0 0 0 10px rgba(251, 111, 146, 0);
-    }
-
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(251, 111, 146, 0);
+    .active-basket-banner {
+        width: 95% !important;
+        margin: 0 auto;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        font-size: 0.85rem;
     }
 }
 
@@ -716,11 +733,16 @@ button:hover {
     }
 
     .qty-controls {
-        scale: 0.9;
+        scale: 0.85;
     }
 
     .search-container {
         flex-direction: column;
+        gap: 0.8rem;
+    }
+
+    .multiplier-grid {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -785,6 +807,7 @@ button:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 10px rgba(251, 111, 146, 0.2);
 }
+
 .version-badge {
     position: fixed;
     bottom: 1rem;
@@ -867,7 +890,15 @@ button:hover {
 
 
 @keyframes shine-text {
-    0% { background-position: 0% center; }
-    50% { background-position: 100% center; }
-    100% { background-position: 0% center; }
+    0% {
+        background-position: 0% center;
+    }
+
+    50% {
+        background-position: 100% center;
+    }
+
+    100% {
+        background-position: 0% center;
+    }
 }

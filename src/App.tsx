@@ -1367,7 +1367,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V8.3.0 Flexible Pricing</div>
+            <div className="version-badge">V9.0.0 Mobile Ready</div>
         </div>
     )
 }
