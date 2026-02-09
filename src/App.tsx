@@ -1091,40 +1091,49 @@ function App() {
                             </div>
                         </div>
                         <div className="customer-grid">
-                            {customers.filter(c => {
-                                const searchLower = customerSearch.toLowerCase();
-                                return (c.first_name + ' ' + c.last_name).toLowerCase().includes(searchLower) ||
-                                    (c.facebook_pseudo || '').toLowerCase().includes(searchLower);
-                            }).map(c => {
-                                const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
-                                return (
-                                    <div key={c.id} className="glass-card customer-card">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <div>
-                                                <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
-                                                <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
+                            {customers
+                                .filter(c => {
+                                    const searchLower = customerSearch.toLowerCase();
+                                    return (c.first_name + ' ' + c.last_name).toLowerCase().includes(searchLower) ||
+                                        (c.facebook_pseudo || '').toLowerCase().includes(searchLower);
+                                })
+                                .sort((a, b) => {
+                                    const aHasActive = orders.some(o => o.customer_id === a.id && o.status === 'attente');
+                                    const bHasActive = orders.some(o => o.customer_id === b.id && o.status === 'attente');
+                                    if (aHasActive && !bHasActive) return -1;
+                                    if (!aHasActive && bHasActive) return 1;
+                                    return 0; // Garde le tri initial (dernière base: alphabétique ou created_at)
+                                })
+                                .map(c => {
+                                    const activeOrder = orders.find(o => o.customer_id === c.id && o.status === 'attente');
+                                    return (
+                                        <div key={c.id} className="glass-card customer-card">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <div>
+                                                    <h3 style={{ margin: 0 }}>{c.first_name} {c.last_name}</h3>
+                                                    <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>{c.facebook_pseudo ? `@${c.facebook_pseudo}` : 'Pas de pseudo'}</p>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button className="qty-btn" onClick={() => setViewingHistory(c)} title="Historique"><Clock size={16} /></button>
+                                                    <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
+                                                    <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
+                                                </div>
                                             </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <button className="qty-btn" onClick={() => setViewingHistory(c)} title="Historique"><Clock size={16} /></button>
-                                                <button className="qty-btn" onClick={() => setEditingCustomer(c)} title="Modifier"><Edit size={16} /></button>
-                                                <button className="delete-btn" onClick={() => deleteCustomer(c.id)} title="Supprimer"><Trash2 size={16} /></button>
-                                            </div>
-                                        </div>
-                                        {activeOrder ? (
-                                            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                                                <span className="status-badge status-attente" style={{ flex: 1, textAlign: 'center' }}>Panier Ouvert</span>
-                                                <button className="tab-btn active" style={{ flex: 2, justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                                    Reprendre <ArrowRight size={16} />
+                                            {activeOrder ? (
+                                                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                                    <span className="status-badge status-attente" style={{ flex: 1, textAlign: 'center' }}>Panier Ouvert</span>
+                                                    <button className="tab-btn active" style={{ flex: 2, justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                                        Reprendre <ArrowRight size={16} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
+                                                    Ouvrir un Panier <ArrowRight size={16} />
                                                 </button>
-                                            </div>
-                                        ) : (
-                                            <button className="tab-btn active" style={{ width: '100%', marginTop: '1rem', justifyContent: 'center' }} onClick={() => createOrder(c.id)}>
-                                                Ouvrir un Panier <ArrowRight size={16} />
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                                            )}
+                                        </div>
+                                    );
+                                })}
                         </div>
                     </section>
                 )
@@ -1339,7 +1348,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V8.1.0 Restricted Controls</div>
+            <div className="version-badge">V8.2.0 Active Priority</div>
         </div>
     )
 }
