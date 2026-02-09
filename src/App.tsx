@@ -113,6 +113,7 @@ function App() {
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [newCategory, setNewCategory] = useState({ name: '', emoji: '' });
     const [itemAddQuantities, setItemAddQuantities] = useState<{ [key: string]: number }>({});
+    const [isManualPrice, setIsManualPrice] = useState(false);
 
     const generateOrderRef = () => {
         return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -180,6 +181,7 @@ function App() {
 
     // Calcul automatique de la TVA (x1.20)
     useEffect(() => {
+        if (isManualPrice) return; // V8.3 Bypass
         const purchase = parseFloat(newItem.purchase_price);
         if (!isNaN(purchase) && purchase > 0) {
             setNewItem(prev => ({
@@ -189,10 +191,11 @@ function App() {
         } else if (newItem.purchase_price === '') {
             setNewItem(prev => ({ ...prev, sale_price: '' }));
         }
-    }, [newItem.purchase_price]);
+    }, [newItem.purchase_price, isManualPrice]);
 
     // Calcul automatique de la TVA (x1.20) pour le mode Edition Master V5.1
     useEffect(() => {
+        if (isManualPrice) return; // V8.3 Bypass
         if (editingItem && editingItem.purchase_price !== undefined) {
             const purchase = typeof editingItem.purchase_price === 'string' ? parseFloat(editingItem.purchase_price) : editingItem.purchase_price;
             if (!isNaN(purchase) && purchase > 0) {
@@ -205,7 +208,7 @@ function App() {
                 }) : null);
             }
         }
-    }, [editingItem?.purchase_price]);
+    }, [editingItem?.purchase_price, isManualPrice]);
 
     const handleAdminLogin = (e: React.FormEvent) => {
         e.preventDefault();
@@ -752,17 +755,24 @@ function App() {
                                 <div className="form-group"><label>Stock Exact</label><input type="number" value={editingItem.quantity} onChange={e => setEditingItem({ ...editingItem, quantity: parseInt(e.target.value) || 0 })} /></div>
                                 <div className="form-group"><label>Vendus (Ratio)</label><input type="number" value={editingItem.sold_quantity} onChange={e => setEditingItem({ ...editingItem, sold_quantity: parseInt(e.target.value) || 0 })} /></div>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', alignItems: 'end' }}>
                                 <div className="form-group">
                                     <label>Prix Achat (€)</label>
                                     <input type="number" step="0.01" value={editingItem.purchase_price} onChange={e => setEditingItem({ ...editingItem, purchase_price: parseFloat(e.target.value) || 0 })} />
-                                    {editingItem.purchase_price > 0 && (
+                                    {editingItem.purchase_price > 0 && !isManualPrice && (
                                         <div style={{ fontSize: '0.75rem', color: 'var(--success)', marginTop: '0.2rem', fontWeight: 600 }}>
                                             ✨ TVA 20% incluse : +{(editingItem.purchase_price * 0.20).toFixed(2)} €
                                         </div>
                                     )}
                                 </div>
-                                <div className="form-group"><label>Prix Vente (€)</label><input type="number" step="0.01" value={editingItem.sale_price} onChange={e => setEditingItem({ ...editingItem, sale_price: parseFloat(e.target.value) || 0 })} /></div>
+                                <div className="form-group">
+                                    <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', marginBottom: '0.5rem', color: 'var(--primary)' }}>
+                                        <input type="checkbox" checked={isManualPrice} onChange={e => setIsManualPrice(e.target.checked)} />
+                                        Prix Manuel
+                                    </label>
+                                    <label>Prix Vente (€)</label>
+                                    <input type="number" step="0.01" value={editingItem.sale_price} onChange={e => setEditingItem({ ...editingItem, sale_price: parseFloat(e.target.value) || 0 })} />
+                                </div>
                             </div>
                             <div className="multiplier-grid" style={{ marginBottom: '1rem' }}>
                                 {[2, 2.5, 3, 3.5, 4, 4.5].map(m => (
@@ -967,8 +977,17 @@ function App() {
                                                     </button>
                                                 ))}
                                             </div>
-                                            <div className="form-group" style={{ marginTop: '1rem' }}><label>Prix Vente (TVA incl.)</label><input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} /></div>
-                                            <button type="submit">Enregistrer dans le Stock</button>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                                                <div className="form-group" style={{ marginBottom: 0, flex: 1 }}>
+                                                    <label>Prix Vente (HT/TTC)</label>
+                                                    <input type="number" step="0.01" value={newItem.sale_price} onChange={e => setNewItem({ ...newItem, sale_price: e.target.value })} />
+                                                </div>
+                                                <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', marginLeft: '1rem', color: 'var(--primary)', marginTop: '1.2rem' }}>
+                                                    <input type="checkbox" checked={isManualPrice} onChange={e => setIsManualPrice(e.target.checked)} />
+                                                    Prix Manuel
+                                                </label>
+                                            </div>
+                                            <button type="submit" style={{ marginTop: '1rem' }}>Enregistrer dans le Stock</button>
                                         </form>
                                     </div>
                                 </aside>
@@ -1348,7 +1367,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V8.2.0 Active Priority</div>
+            <div className="version-badge">V8.3.0 Flexible Pricing</div>
         </div>
     )
 }
