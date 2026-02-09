@@ -111,7 +111,8 @@ function App() {
     const [editingItem, setEditingItem] = useState<Item | null>(null);
     const [selectingPaymentOrder, setSelectingPaymentOrder] = useState<Order | null>(null);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
-    const [newCategory, setNewCategory] = useState({ name: '', emoji: '📦' });
+    const [newCategory, setNewCategory] = useState({ name: '', emoji: '' });
+    const [itemAddQuantities, setItemAddQuantities] = useState<{ [key: string]: number }>({});
 
     const generateOrderRef = () => {
         return `REF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
@@ -426,13 +427,13 @@ function App() {
         }
     };
 
-    const addItemToOrder = async (orderId: string, item: Item) => {
+    const addItemToOrder = async (orderId: string, item: Item, requestedQty: number = 1) => {
         // Sécurité Stock V3.8
         const currentOrder = orders.find(o => o.id === orderId);
         const inBasketQty = currentOrder?.order_items?.find(oi => oi.item_id === item.id)?.quantity || 0;
 
-        if (item.quantity - inBasketQty <= 0) {
-            showToast("⚠️ Plus assez de stock !");
+        if (item.quantity - inBasketQty < requestedQty) {
+            showToast("⚠️ Stock insuffisant pour cette quantité !");
             return;
         }
 
@@ -440,26 +441,31 @@ function App() {
 
         if (existingOrderItem) {
             const { error } = await supabase.from('order_items').update({
-                quantity: existingOrderItem.quantity + 1
+                quantity: existingOrderItem.quantity + requestedQty,
+                purchase_unit_price: item.purchase_price // Maintient à jour au cas où V4.3
             }).eq('id', existingOrderItem.id);
 
             if (error) alert(error.message);
             else {
-                showToast(`${item.title} (+1) ajouté ! ✅`);
+                showToast(`${item.title} (+${requestedQty}) ajouté ! ✅`);
+                // Reset local qty
+                setItemAddQuantities(prev => ({ ...prev, [item.id]: 1 }));
                 fetchData();
             }
         } else {
             const { error } = await supabase.from('order_items').insert([{
                 order_id: orderId,
                 item_id: item.id,
-                quantity: 1,
+                quantity: requestedQty,
                 unit_price: item.sale_price,
-                purchase_unit_price: item.purchase_price
+                purchase_unit_price: item.purchase_price // V4.3 Profit Tracker
             }]);
 
             if (error) alert(error.message);
             else {
-                showToast(`${item.title} ajouté ! ✅`);
+                showToast(`${item.title} (${requestedQty}) ajouté ! 🛍️`);
+                // Reset local qty
+                setItemAddQuantities(prev => ({ ...prev, [item.id]: 1 }));
                 fetchData();
             }
         }
@@ -995,23 +1001,54 @@ function App() {
                                                         <button className="qty-btn" onClick={() => updateQuantity(item.id, 'quantity', 1)}>+</button>
                                                     </div>
                                                 </div>
-                                                <button
-                                                    className={`add-basket-refined ${activeOrderId ? 'highlight' : ''}`}
-                                                    onClick={() => {
-                                                        if (activeOrderId) addItemToOrder(activeOrderId, item);
-                                                        else {
-                                                            const order = orders.find(o => o.status === 'attente');
-                                                            if (order) {
-                                                                setActiveOrderId(order.id);
-                                                                addItemToOrder(order.id, item);
-                                                            } else alert("Veuillez sélectionner un client d'abord !");
-                                                        }
-                                                    }}
-                                                    title="Ajouter au Panier"
-                                                >
-                                                    <ShoppingCart size={18} />
-                                                    {activeOrderId && <span className="add-badge">+1</span>}
-                                                </button>
+                                                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                    <div className="qty-controls" style={{ background: 'rgba(255,255,255,0.1)', padding: '0.2rem' }}>
+                                                        <button
+                                                            className="qty-btn"
+                                                            style={{ width: '24px', height: '24px' }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const q = itemAddQuantities[item.id] || 1;
+                                                                if (q > 1) setItemAddQuantities({ ...itemAddQuantities, [item.id]: q - 1 });
+                                                            }}
+                                                        >
+                                                            -
+                                                        </button>
+                                                        <span style={{ minWidth: '20px', textAlign: 'center', fontWeight: 700 }}>
+                                                            {itemAddQuantities[item.id] || 1}
+                                                        </span>
+                                                        <button
+                                                            className="qty-btn"
+                                                            style={{ width: '24px', height: '24px' }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const q = itemAddQuantities[item.id] || 1;
+                                                                setItemAddQuantities({ ...itemAddQuantities, [item.id]: q + 1 });
+                                                            }}
+                                                        >
+                                                            +
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        className={`add-basket-refined ${activeOrderId ? 'highlight' : ''}`}
+                                                        style={{ padding: '0.5rem 0.8rem' }}
+                                                        onClick={() => {
+                                                            const q = itemAddQuantities[item.id] || 1;
+                                                            if (activeOrderId) addItemToOrder(activeOrderId, item, q);
+                                                            else {
+                                                                const order = orders.find(o => o.status === 'attente');
+                                                                if (order) {
+                                                                    setActiveOrderId(order.id);
+                                                                    addItemToOrder(order.id, item, q);
+                                                                } else alert("Veuillez sélectionner un client d'abord !");
+                                                            }
+                                                        }}
+                                                        title="Ajouter au Panier"
+                                                    >
+                                                        <ShoppingCart size={18} />
+                                                        {activeOrderId && <span className="add-badge">+{itemAddQuantities[item.id] || 1}</span>}
+                                                    </button>
+                                                </div>
                                                 {isAdminMode && (
                                                     <button className="delete-btn" title="Modifier Master" onClick={() => setEditingItem(item)}>
                                                         <Edit size={18} color="var(--primary)" />
@@ -1131,9 +1168,14 @@ function App() {
                                             <div key={oi.id} className="basket-item">
                                                 <div>
                                                     <button className="remove-item-btn" onClick={() => removeOrderItem(order.id, oi.id)} title="Retirer"><MinusCircle size={14} color="#d90429" /></button>
-                                                    <span>{oi.items?.title}</span>
+                                                    <span>
+                                                        {oi.items?.title}
+                                                        <span style={{ marginLeft: '0.5rem', color: 'var(--primary)', fontWeight: 800 }}>
+                                                            x{oi.quantity}
+                                                        </span>
+                                                    </span>
                                                 </div>
-                                                <span style={{ fontWeight: 600 }}>{oi.unit_price.toFixed(2)} €</span>
+                                                <span style={{ fontWeight: 600 }}>{(oi.unit_price * oi.quantity).toFixed(2)} €</span>
                                             </div>
                                         ))}
                                         {(!order.order_items || order.order_items.length === 0) && <p style={{ opacity: 0.5, fontSize: '0.8rem', textAlign: 'center' }}>Le panier est vide</p>}
@@ -1297,7 +1339,7 @@ function App() {
                     </section>
                 )
             }
-            <div className="version-badge">V7.1.0 Dynamic Categories & Polish</div>
+            <div className="version-badge">V8.0.0 Advanced Controls</div>
         </div>
     )
 }
